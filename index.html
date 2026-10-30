@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>To-Do-Studio</title>
+  <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Studio">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="kopf">
+    <div>
+      <p class="kopf-datum" id="kopfDatum"></p>
+      <h1 id="gruss">Hallo!</h1>
+    </div>
+    <div class="kopf-knoepfe">
+      <span class="claude-punkt" id="claudePunkt" title="Claude-Helfer"></span>
+      <button class="icon-knopf" id="knopfNeuLaden" aria-label="Neu laden">⟳</button>
+      <button class="icon-knopf" id="knopfEinstellungen" aria-label="Einstellungen">⚙</button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <main id="inhalt" aria-live="polite"></main>
+
+  <form class="eingabe" id="eingabe" autocomplete="off">
+    <div class="typ-wahl" role="radiogroup" aria-label="Art des Eintrags">
+      <button type="button" data-typ="aufgabe" class="aktiv">Aufgabe</button>
+      <button type="button" data-typ="termin">Termin</button>
+      <button type="button" data-typ="idee">Idee</button>
+    </div>
+    <div class="eingabe-zeile">
+      <input id="eingabeText" type="text" enterkeyhint="send"
+             placeholder="z. B. „Morgen 10 Uhr Steuerberater anrufen, wichtig“">
+      <button type="button" class="mikro" id="knopfMikro" aria-label="Diktieren">🎙</button>
+      <button type="submit" class="senden" aria-label="Hinzufügen">＋</button>
+    </div>
+    <p class="eingabe-hinweis" id="eingabeHinweis" hidden></p>
+  </form>
+
+  <nav class="navi" id="navi">
+    <button data-ansicht="heute" class="aktiv"><span>☀</span>Heute</button>
+    <button data-ansicht="aufgaben"><span>✓</span>Aufgaben</button>
+    <button data-ansicht="termine"><span>🗓</span>Termine</button>
+    <button data-ansicht="ideen"><span>💡</span>Ideen</button>
+    <button data-ansicht="mails"><span>✉</span>Mails</button>
+  </nav>
+
+  <dialog id="dialog"><form method="dialog" id="dialogInhalt"></form></dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="planer.js"></script>
+  <script src="demo.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
