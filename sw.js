@@ -1,6 +1,6 @@
-/* To-Do-Studio – Offline-Hülle: Die Oberfläche öffnet sich auch ohne Netz (Daten dann vom letzten Stand). */
-const VERSION = 'studio-v1';
-const DATEIEN = ['./', 'index.html', 'style.css', 'app.js', 'planer.js', 'demo.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
+/* Todo Studio – Offline-Hülle: Die Oberfläche öffnet sich auch ohne Netz (Daten dann vom letzten Stand). */
+const VERSION = 'studio-v7-bau';
+const DATEIEN = ['./', 'index.html', 'style.css', 'studio.js', 'jarvis.js', 'wolke.js', 'planer.js', 'demo.js', 'demo-zentrale.js', 'demo-katalog.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(DATEIEN)).then(() => self.skipWaiting()));
@@ -12,7 +12,8 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin) return; // Google-Skript nie zwischenspeichern
+  // Google-Skript, Zentrale und Fremdserver nie zwischenspeichern (Three.js lädt der Browser selbst)
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   // Erst Netz (damit Updates sofort ankommen), sonst Zwischenspeicher
   e.respondWith(
     fetch(e.request).then((res) => {
