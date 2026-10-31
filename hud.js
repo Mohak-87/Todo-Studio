@@ -100,6 +100,15 @@
     return panel('Team', h + '</ul>', 'sitzungen');
   }
 
+  /** Nächste geplante Routine (Ablauf nach Zeitplan), z. B. „Mo 08:00 Morgen-Lagebericht“. */
+  function routineHtml(z) {
+    const r = ((z && z.routinen) || []).filter((x) => x.aktiv && x.naechster).sort((a, b) => a.naechster.localeCompare(b.naechster))[0];
+    if (!r) return '';
+    const n = new Date(r.naechster), istHeute = Studio.heuteIso(n) === Studio.heuteIso();
+    const wann = (istHeute ? 'heute' : n.toLocaleDateString('de-DE', { weekday: 'short' })) + ' ' + r.zeit;
+    return `<ul class="hud-liste">${zeile(`<i class="punkt aktiv"></i>${esc(r.name)}`, wann)}</ul>`;
+  }
+
   function systemHtml(z) {
     const g = !!heute(), verbunden = !!z;
     const st = z && z.stimme, ge = z && z.gedaechtnis;
@@ -110,7 +119,7 @@
       ${zeile(`<i class="punkt mo"></i>MO`, esc(mo))}
       ${zeile(`<i class="punkt ${st && st.bereit ? 'ok' : ''}"></i>Stimme`, st && st.bereit ? esc(st.name.replace(/\s*\(.*\)/, '')) : 'Browser')}
       ${ge ? zeile('<i class="punkt mo"></i>Gedächtnis', `${ge.erinnerungen} Erinn. · ${ge.tage} Tage`) : ''}
-    </ul>`;
+    </ul>${routineHtml(z)}`;
     return panel('System', h, '');
   }
 

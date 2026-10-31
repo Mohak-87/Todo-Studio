@@ -52,6 +52,7 @@ const Jarvis = (() => {
     const bereit = zentraleBereit();
     Studio.pille('#pilleZentrale', j.verbunden ? 'an' : (bereit ? 'aus' : ''),
       j.verbunden ? 'Zentrale verbunden' : bereit ? 'Zentrale nicht erreichbar' : 'Zentrale nicht eingerichtet');
+    document.dispatchEvent(new CustomEvent('studio:daten'));
     $('#typWahl').hidden = true; // Art wird aus dem Satz erkannt („Erstelle eine Aufgabe …“, „Merke dir die Idee …“)
     eingabe.placeholder = j.verbunden ? 'Womit kann ich dienen?' : 'Zentrale offline – Nachricht geht in den Briefkasten …';
     if (!j.verbunden) statusSetzen(bereit ? 'Zentrale offline' : 'nur Todos');
@@ -239,6 +240,7 @@ const Jarvis = (() => {
     zaehler.hidden = !offen; zaehler.textContent = offen;
     chatZeichnen();
     wolkeAktualisieren();
+    document.dispatchEvent(new CustomEvent('studio:daten')); // Seitenanzeigen auffrischen
     if (Studio.z.ansicht === 'sitzungen' && arbeit.reiter !== 'bibliothek' && arbeit.reiter !== 'agenten') Studio.zeichnen();
   }
 
@@ -1049,6 +1051,7 @@ const Jarvis = (() => {
     rufwortAnwenden() { if (h.modus === 'aus' || h.modus === 'wach') modusSetzen(grundModus()); },
     neuVerbinden() { j.verbunden = null; j.warVerbunden = false; j.hinweisOffline = false; j.zustand = null; j.lokal = []; j.gezeigt.clear(); j.ersteRunde = true; verbinden(); },
     get agentenStand() { return agentenStand; },
+    get zustand() { return j.verbunden ? j.zustand : null; },
     get katalog() { return j.katalog; },
     agentKarte, sprechen, agentZuKarte
   };

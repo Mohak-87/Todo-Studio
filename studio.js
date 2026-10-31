@@ -100,6 +100,7 @@ const Studio = (() => {
   function zeichnen() {
     const d = new Date();
     $('#kopfDatum').textContent = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+    document.dispatchEvent(new CustomEvent('studio:daten')); // Seitenanzeigen auffrischen
     if (z.ansicht === 'jarvis') return;
     const ansichten = { heute: zeigeHeute, aufgaben: zeigeAufgaben, termine: zeigeTermine, ideen: zeigeIdeen, mails: zeigeMails };
     const fn = ansichten[z.ansicht] || (fremdeAnsichten[z.ansicht] && fremdeAnsichten[z.ansicht].zeichnen);

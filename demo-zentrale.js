@@ -152,7 +152,13 @@ const DemoZentrale = (() => {
     agent('jarvis', 'bereit', '');
   }
 
-  function zustand() { return { ...z, agenten: agenten.concat(sitzungAgenten()), letzteNr: nr, katalogVersion: KATALOG.version }; }
+  // Demo: Morgen-Lagebericht Mo–Fr 08:00, Gedächtnis mit ein paar Einträgen
+  function demoRoutinen() {
+    const n = new Date(); n.setHours(8, 0, 0, 0);
+    do { n.setDate(n.getDate() + 1); } while (n.getDay() === 0 || n.getDay() === 6);
+    return [{ id: 'r1', name: 'Morgen-Lagebericht', zeit: '08:00', tage: [1, 2, 3, 4, 5], tageText: 'Mo–Fr', aktiv: true, letzterLauf: '', naechster: n.toISOString() }];
+  }
+  function zustand() { return { ...z, agenten: agenten.concat(sitzungAgenten()), letzteNr: nr, katalogVersion: KATALOG.version, routinen: demoRoutinen(), gedaechtnis: { erinnerungen: 12, tage: 3 } }; }
   const kopie = (x) => JSON.parse(JSON.stringify(x));
 
   function antworten(methode, pfad, body) {
