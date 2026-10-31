@@ -38,7 +38,7 @@ const Jarvis = (() => {
       method: methode,
       headers: { Authorization: 'Bearer ' + c.zentraleSchluessel, 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(pfad.startsWith('/api/ereignisse') ? 40000 : 15000)
+      signal: AbortSignal.timeout(pfad.startsWith('/api/ereignisse') || pfad === '/api/neustart' ? 40000 : 15000)
     });
     let r;
     try { r = await res.json(); } catch (e) { throw new Error('Zentrale antwortet unerwartet (HTTP ' + res.status + ').'); }
@@ -371,7 +371,31 @@ const Jarvis = (() => {
         ? '<span class="chip ok">eingeschaltet</span><button class="knopf klein" data-j="ntfy" data-id="aus">Ausschalten</button>'
         : '<button class="knopf haupt-knopf" data-j="ntfy" data-id="an">Einschalten</button>'}</div>
       <p class="hilfe">Der Kanalname ist Ihr Schlüssel – wer ihn kennt, sieht die (inhaltslosen) Meldungen. Meldungen laufen über den öffentlichen ntfy-Server.</p>
+    </div>
+    <div class="karte">
+      <h3>Zentrale neu starten</h3>
+      <p class="leise">Prüft zuerst alle Programmdateien der Zentrale. Nur wenn alle fehlerfrei sind, wird der Stand gesichert und die Zentrale neu gestartet; die App verbindet sich danach von selbst wieder.</p>
+      <div class="knopf-reihe"><button class="knopf" data-j="neustart">Zentrale neu starten</button></div>
     </div>`;
+  }
+
+  async function zentraleNeustarten() {
+    if (!j.verbunden) return toast('Die Zentrale ist nicht erreichbar.');
+    if (!(await Studio.bestaetigen('Zentrale neu starten?', 'Die Zentrale prüft ihren Code und startet dann neu. Für einige Sekunden ist sie nicht erreichbar.', 'Neu starten', true))) return;
+    try {
+      let r = await zentrale('POST', '/api/neustart', {});
+      if (!r.neustart && r.laufend && !r.fehler.length) {
+        if (!(await Studio.bestaetigen('Sitzungen laufen noch', `${r.laufend} Claude-Sitzung(en) laufen gerade und werden durch den Neustart abgebrochen. Trotzdem neu starten?`, 'Trotzdem', true))) return;
+        r = await zentrale('POST', '/api/neustart', { trotzdem: true });
+      }
+      if (r.fehler.length) {
+        return Studio.dialogOeffnen(`<h2>Kein Neustart</h2><p class="leise">Diese Dateien enthalten Fehler – die Zentrale läuft unverändert weiter.</p>
+          <div style="font:12px/1.45 ui-monospace,Consolas,monospace;white-space:pre-wrap;background:rgba(0,0,0,.3);padding:10px;border-radius:10px;max-height:300px;overflow:auto">${r.fehler.map((f) => esc(f.datei + '\n' + f.fehler)).join('\n\n')}</div>
+          <div class="knopf-reihe"><button class="knopf" value="ok">Schließen</button></div>`);
+      }
+      toast('Code geprüft – die Zentrale startet neu. Ich verbinde mich gleich wieder.', 8000);
+      setTimeout(() => verbinden(), 9000); // start-zentrale.cmd wartet 5 s vor dem Neustart
+    } catch (err) { toast(err.message, 6000); }
   }
 
   function sitzungenZeichnen() {
@@ -488,6 +512,7 @@ const Jarvis = (() => {
     if (was === 'unter-zeigen') { const a = agentZuKarte(id); if (a) { const r = el.getBoundingClientRect(); agentKarte(a, r.left, r.top); } }
     if (was === 'agent-zeigen') { Studio.oeffne('jarvis'); if (window.Wolke && Wolke.fokus) Wolke.fokus(id); }
     if (was === 'kanal-kopieren') { const k = j.zustand && j.zustand.ntfy && j.zustand.ntfy.kanal; if (k) navigator.clipboard.writeText(k).then(() => toast('Kanalname kopiert.'), () => toast(k)); }
+    if (was === 'neustart') zentraleNeustarten();
     if (was === 'ntfy') {
       zentrale('POST', '/api/einstellung', { ntfy: id === 'an' }).then((r) => { j.zustand.ntfy = r.ntfy; Studio.zeichnen(); toast(id === 'an' ? 'Eingeschaltet – eine Testmeldung ist unterwegs.' : 'Ausgeschaltet.'); }).catch((err) => toast(err.message));
     }
