@@ -1,5 +1,5 @@
 /* Todo Studio – Offline-Hülle: Die Oberfläche öffnet sich auch ohne Netz (Daten dann vom letzten Stand). */
-const VERSION = 'studio-v7-bau';
+const VERSION = 'studio-v8-wolke';
 const DATEIEN = ['./', 'index.html', 'style.css', 'studio.js', 'jarvis.js', 'wolke.js', 'planer.js', 'demo.js', 'demo-zentrale.js', 'demo-katalog.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
@@ -16,7 +16,8 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   // Erst Netz (damit Updates sofort ankommen), sonst Zwischenspeicher
   e.respondWith(
-    fetch(e.request).then((res) => {
+    // „no-cache“: beim Server nachfragen, ob es eine neuere Fassung gibt (sonst hält der Browser alte Dateien fest)
+    fetch(e.request, { cache: 'no-cache' }).then((res) => {
       const kopie = res.clone();
       caches.open(VERSION).then((c) => c.put(e.request, kopie));
       return res;

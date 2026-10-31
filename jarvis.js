@@ -213,10 +213,11 @@ const Jarvis = (() => {
   }
 
   function wolkeAktualisieren() {
+    // Katalog immer laden – auch wenn die Wolke (Modul) noch nicht fertig ist; sie holt ihn sich beim Start ab
+    katalogLaden();
     if (!window.Wolke) return;
     window.Wolke.setzeAgenten(agentenStand.agenten, agentenStand.jarvis);
     if (Wolke.setzeAktive) Wolke.setzeAktive((j.zustand && j.zustand.aktiveAgenten) || {});
-    katalogLaden();
   }
 
   // ---------- Arbeit (Schublade): Aufträge · Bibliothek · Agenten · Meldungen ----------
