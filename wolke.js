@@ -1,4 +1,6 @@
 /* Todo Studio – Jarvis als Weltraumnebel (violett), Sub-Agenten als helle Partikel darin.
+   Die Fach-Bereiche hängen als Sternhaufen an Nebelarmen am Kern; arbeitende Agenten sind über
+   leuchtende Synapsen mit Jarvis verbunden, auf denen Signale wandern.
    Three.js mit Leuchteffekt (Bloom). Zoom per Mausrad / Zwei-Finger-Geste, Partikel antippen für Details. */
 
 const canvas = document.getElementById('wolke');
@@ -135,17 +137,17 @@ try {
   }
 
   // Gemeinsamer Shader für Gas und Sternenstaub (sanfte Drehung, Atmen beim Denken/Sprechen)
-  function punktMaterial({ textur, additiv = true, skala, alphaFaktor }) {
+  function punktMaterial({ textur, additiv = true, skala, alphaFaktor, drehen = true }) {
     return new THREE.ShaderMaterial({
-      uniforms: { uZeit: { value: 0 }, uPuls: { value: 0 }, uPixel: { value: pixelRatio }, uTex: { value: textur }, uFunkeln: { value: reduziert ? 0 : 1 } },
+      uniforms: { uZeit: { value: 0 }, uPuls: { value: 0 }, uPixel: { value: pixelRatio }, uTex: { value: textur }, uFunkeln: { value: reduziert ? 0 : 1 }, uDrehen: { value: drehen ? 1 : 0 } },
       vertexShader: `
         attribute vec3 farbe; attribute float groesse; attribute float phase; attribute float alpha;
-        uniform float uZeit; uniform float uPuls; uniform float uPixel; uniform float uFunkeln;
+        uniform float uZeit; uniform float uPuls; uniform float uPixel; uniform float uFunkeln; uniform float uDrehen;
         varying vec3 vFarbe; varying float vAlpha; varying float vDreh;
         void main() {
           vec3 p = position;
           float r = length(p.xz);
-          float w = uZeit * (0.025 + 0.06 / (1.0 + r * 0.4));
+          float w = uZeit * (0.025 + 0.06 / (1.0 + r * 0.4)) * uDrehen;
           p.xz = mat2(cos(w), -sin(w), sin(w), cos(w)) * p.xz;
           p += 0.15 * vec3(sin(uZeit * 0.3 + phase), cos(uZeit * 0.25 + phase * 1.3), sin(uZeit * 0.2 + phase * 0.7));
           p *= 1.0 + uPuls * 0.035 * sin(uZeit * 5.0 + r * 0.8);
@@ -169,7 +171,7 @@ try {
     });
   }
 
-  function punkteWolke(punkte, { groesse, alpha, farbe }, material) {
+  function punkteWolke(punkte, { groesse, alpha, farbe }, material, gruppe = nebel) {
     const n = punkte.length;
     const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), gr = new Float32Array(n), ph = new Float32Array(n), al = new Float32Array(n);
     const c = new THREE.Color();
@@ -185,7 +187,7 @@ try {
     geo.setAttribute('phase', new THREE.BufferAttribute(ph, 1));
     geo.setAttribute('alpha', new THREE.BufferAttribute(al, 1));
     const p = new THREE.Points(geo, material);
-    nebel.add(p);
+    gruppe.add(p);
     return p;
   }
 
@@ -295,14 +297,66 @@ try {
     return new THREE.Vector3(Math.cos(t) * r, y, Math.sin(t) * r);
   }
 
+  // Nebelarme: Gas und Sternenstaub vom Kern zu jedem Bereich – alles gehört sichtbar zu einer Wolke
+  const armGasMat = punktMaterial({ textur: GAS, skala: 260, alphaFaktor: 0.25, drehen: false });
+  const armKornMat = punktMaterial({ textur: LEUCHT, skala: 40, alphaFaktor: 0.3, drehen: false });
+  const ARM_FARBEN = ['#8b5cf6', '#5b5bf0', '#3f63e0', '#2c4bb8'].map((h) => new THREE.Color(h)); // Violett am Kern → kühles Blau außen
+  let armTeile = [];
+
+  function armFarbe(anteil, ziel) {
+    const t = Math.min(0.999, anteil) * (ARM_FARBEN.length - 1), i = Math.floor(t);
+    return ziel.copy(ARM_FARBEN[i]).lerp(ARM_FARBEN[i + 1], t - i);
+  }
+
+  /** Bogen vom Kern zum Bereich (leicht geschwungen, je Bereich anders) */
+  function armBogen(mitte, id) {
+    const seite = new THREE.Vector3(-mitte.z, 0, mitte.x).normalize().multiplyScalar((streuwert(id + 'b') - 0.5) * 6);
+    const kontrolle = mitte.clone().multiplyScalar(0.5).add(seite).add(new THREE.Vector3(0, (streuwert(id + 'y') - 0.5) * 3, 0));
+    return new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 0, 0), kontrolle, mitte.clone());
+  }
+
+  function armeBauen(liste) {
+    for (const o of armTeile) { haufenGruppe.remove(o); o.geometry.dispose(); if (o.material !== armGasMat && o.material !== armKornMat) o.material.dispose(); }
+    armTeile = [];
+    const gasPunkte = [], kornPunkte = [];
+    const zufall = (a) => (Math.random() * 2 - 1) * a;
+    for (const { mitte, id } of liste) {
+      const bogen = armBogen(mitte, id);
+      // Gas entlang des Arms (dichter am Haufen) und als Hülle um den Haufen
+      const nArm = schwach ? 9 : 20, nHuelle = schwach ? 12 : 26, nKorn = schwach ? 26 : 70;
+      for (let i = 0; i < nArm; i++) { const u = 0.3 + Math.random() * 0.7, q = bogen.getPoint(u), b = 0.8 + u * 1.6; gasPunkte.push([q.x + zufall(b), q.y + zufall(b * 0.6), q.z + zufall(b), u]); }
+      for (let i = 0; i < nHuelle; i++) gasPunkte.push([mitte.x + zufall(2.6), mitte.y + zufall(1.8), mitte.z + zufall(2.6), 1]);
+      for (let i = 0; i < nKorn; i++) { const u = Math.random() ** 0.6, q = bogen.getPoint(u), b = 0.4 + u * 1.8; kornPunkte.push([q.x + zufall(b), q.y + zufall(b * 0.6), q.z + zufall(b), u]); }
+      // Feine Faser: zeigt die Zugehörigkeit zum Kern, auch wenn gerade niemand arbeitet
+      const faser = new THREE.Line(new THREE.BufferGeometry().setFromPoints(bogen.getPoints(40)),
+        new THREE.LineBasicMaterial({ color: '#8fa3ff', transparent: true, opacity: 0.045, depthWrite: false, blending: THREE.AdditiveBlending }));
+      faser.renderOrder = 2;
+      haufenGruppe.add(faser);
+      armTeile.push(faser);
+    }
+    armTeile.push(punkteWolke(gasPunkte, {
+      groesse: () => 3 + Math.random() * 6,
+      alpha: (u) => 0.012 + u * 0.022,
+      farbe: (x, y, z, u, c) => armFarbe(u, c).multiplyScalar(0.9)
+    }, armGasMat, haufenGruppe));
+    armTeile.push(punkteWolke(kornPunkte, {
+      groesse: () => 0.4 + Math.random() ** 4 * 2.4,
+      alpha: (u) => 0.16 + (1 - u) * 0.18,
+      farbe: (x, y, z, u, c) => armFarbe(u, c).lerp(new THREE.Color('#ffffff'), 0.35)
+    }, armKornMat, haufenGruppe));
+  }
+
   function setzeKatalog(k) {
     for (const e of fach.values()) { haufenGruppe.remove(e.sprite); e.sprite.material.dispose(); if (e.label) e.label.remove(); }
     for (const h of haufen.values()) { haufenGruppe.remove(h.glanz); h.label.remove(); }
     fach.clear(); haufen.clear();
     const bereiche = k.bereiche || [];
+    const arme = [];
     bereiche.forEach((b, i) => {
       const richtung = fibonacci(i, bereiche.length);
-      const mitte = new THREE.Vector3(richtung.x * 24, richtung.y * 12, richtung.z * 24);
+      // Näher am Kern als früher (24 → 15): die Haufen sitzen am Rand derselben Wolke
+      const mitte = new THREE.Vector3(richtung.x * 15, richtung.y * 8, richtung.z * 15);
+      arme.push({ mitte, id: b.id });
       const glanz = new THREE.Sprite(new THREE.SpriteMaterial({ map: LEUCHT, color: new THREE.Color('#9fb4ff'), transparent: true, opacity: 0.1, depthWrite: false, blending: THREE.AdditiveBlending }));
       glanz.position.copy(mitte); glanz.scale.setScalar(6);
       haufenGruppe.add(glanz);
@@ -322,7 +376,101 @@ try {
         fach.set(a.id, { sprite, label: null, daten: a, basis, bereich: b.id });
       });
     });
+    armeBauen(arme);
     setzeAktive(aktiveFach);
+  }
+
+  // ---------- Synapsen: leuchtende Verbindungen vom Kern zu allem, was gerade arbeitet ----------
+  const synapsenGruppe = new THREE.Group();
+  scene.add(synapsenGruppe);
+  const synapsen = new Map(); // schluessel -> { linie, signale, staerke, soll, ziel(), via(), ende? }
+  const PUNKTE = 36;
+  const SYN_FARBE = new THREE.Color('#7fd4ff'), SYN_WARN = new THREE.Color('#fbbf24'), SYN_FEHLER = new THREE.Color('#fb7185');
+  let blitzNr = 0, naechsterBlitz = 0;
+
+  function synapseAnlegen(schluessel, ziel, via, farbe) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PUNKTE * 3), 3));
+    const linie = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: farbe || SYN_FARBE, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    linie.renderOrder = 5;
+    synapsenGruppe.add(linie);
+    const perlen = new THREE.Points(geo, new THREE.PointsMaterial({ map: LEUCHT, color: farbe || SYN_FARBE, size: 0.32, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    perlen.renderOrder = 5;
+    synapsenGruppe.add(perlen);
+    const signale = [0, 1, 2].map((i) => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: LEUCHT, color: farbe || '#ffffff', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+      sp.scale.setScalar(0.6); sp.renderOrder = 6; synapsenGruppe.add(sp);
+      return { sp, versatz: i / 3 };
+    });
+    const syn = { linie, perlen, signale, staerke: 0, soll: 1, ziel, via, farbe: farbe || SYN_FARBE, tempo: 0.45 + streuwert(schluessel) * 0.3 };
+    synapsen.set(schluessel, syn);
+    return syn;
+  }
+
+  function synapseEntfernen(schluessel, syn) {
+    synapsenGruppe.remove(syn.linie); synapsenGruppe.remove(syn.perlen); syn.linie.geometry.dispose(); syn.linie.material.dispose(); syn.perlen.material.dispose();
+    for (const s of syn.signale) { synapsenGruppe.remove(s.sp); s.sp.material.dispose(); }
+    synapsen.delete(schluessel);
+  }
+
+  const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vK = new THREE.Vector3(), KERN_POS = new THREE.Vector3(0, 0, 0);
+  const bogenTmp = new THREE.QuadraticBezierCurve3(new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3());
+
+  /** Welche Verbindungen sollen gerade leuchten? */
+  function synapsenSoll(t) {
+    const soll = new Map();
+    for (const [id, e] of sprites) {
+      const st = e.daten.status;
+      if (!AKTIV.has(st)) continue;
+      soll.set('a:' + id, { ziel: (v) => e.sprite.getWorldPosition(v), via: null, farbe: st === 'wartet' || st === 'meldet' ? SYN_WARN : st === 'haengt' ? SYN_FEHLER : null });
+    }
+    for (const [id, st] of Object.entries(aktiveFach)) {
+      const e = fach.get(id);
+      if (!e || !AKTIV.has(st)) continue;
+      const hf = haufen.get(e.bereich);
+      soll.set('f:' + id, { ziel: (v) => e.sprite.getWorldPosition(v), via: hf ? (v) => v.copy(hf.mitte).applyMatrix4(haufenGruppe.matrixWorld) : null, farbe: st === 'wartet' ? SYN_WARN : null });
+    }
+    return soll;
+  }
+
+  function synapsenAktualisieren(t) {
+    const soll = synapsenSoll(t);
+    for (const [k, d] of soll) {
+      const syn = synapsen.get(k) || synapseAnlegen(k, d.ziel, d.via, d.farbe);
+      syn.soll = 1; syn.ziel = d.ziel; syn.via = d.via;
+    }
+    // Gedankenblitze, solange Jarvis über Ihre Nachricht nachdenkt: kurze Impulse in die Bereiche
+    if (jarvisStatus === 'denkt' && !reduziert && t > naechsterBlitz && fach.size) {
+      naechsterBlitz = t + 0.35 + Math.random() * 0.45;
+      const alle = [...fach.values()];
+      const e = alle[Math.floor(Math.random() * alle.length)];
+      const hf = haufen.get(e.bereich);
+      const syn = synapseAnlegen('b:' + (blitzNr++), (v) => e.sprite.getWorldPosition(v), hf ? (v) => v.copy(hf.mitte).applyMatrix4(haufenGruppe.matrixWorld) : null, new THREE.Color('#d9c8ff'));
+      syn.ende = t + 0.9; syn.tempo = 1.4; syn.blitz = true;
+    }
+    for (const [k, syn] of synapsen) {
+      if (syn.blitz) syn.soll = t < syn.ende ? 1 : 0;
+      else if (!soll.has(k)) syn.soll = 0;
+      syn.staerke += (syn.soll - syn.staerke) * (syn.blitz ? 0.25 : 0.08);
+      if (syn.soll === 0 && syn.staerke < 0.02) { synapseEntfernen(k, syn); continue; }
+      syn.ziel(vB);
+      if (syn.via) { syn.via(vK); vK.lerp(vB, 0.15); } else vK.copy(vB).multiplyScalar(0.5).add(vA.set(0, 1.6, 0));
+      bogenTmp.v0.copy(KERN_POS); bogenTmp.v1.copy(vK); bogenTmp.v2.copy(vB);
+      const pos = syn.linie.geometry.attributes.position;
+      for (let i = 0; i < PUNKTE; i++) { bogenTmp.getPoint(i / (PUNKTE - 1), vA); pos.setXYZ(i, vA.x, vA.y, vA.z); }
+      pos.needsUpdate = true;
+      syn.linie.geometry.computeBoundingSphere();
+      const flackern = syn.blitz ? 1 : 0.8 + Math.sin(t * 7 + syn.tempo * 10) * 0.2;
+      syn.linie.material.opacity = syn.staerke * (syn.blitz ? 0.55 : 0.6) * flackern;
+      syn.perlen.material.opacity = syn.staerke * (syn.blitz ? 0.35 : 0.45) * flackern;
+      // Signale wandern vom Kern zum Agenten (Jarvis schickt Arbeit) – beim Blitz nur eines
+      syn.signale.forEach((s, i) => {
+        if (syn.blitz && i > 0) { s.sp.material.opacity = 0; return; }
+        const u = reduziert ? 0.5 : (t * syn.tempo + s.versatz) % 1;
+        bogenTmp.getPoint(u, s.sp.position);
+        s.sp.material.opacity = syn.staerke * Math.sin(u * Math.PI) * 0.95;
+      });
+    }
   }
 
   function setzeAktive(map) {
@@ -353,9 +501,9 @@ try {
       v3.copy(hf.mitte).applyMatrix4(haufenGruppe.matrixWorld);
       const entfernung = camera.position.distanceTo(v3);
       v3.project(camera);
-      const sichtbar = v3.z < 1 && entfernung < 46 && entfernung > 3;
+      const sichtbar = v3.z < 1 && entfernung < 26 && entfernung > 3;
       if (sichtbar) { hf.label.style.left = ((v3.x + 1) / 2 * w) + 'px'; hf.label.style.top = ((1 - v3.y) / 2 * h - 34) + 'px'; }
-      hf.label.style.opacity = sichtbar ? String(Math.min(1, (46 - entfernung) / 14)) : '0';
+      hf.label.style.opacity = sichtbar ? String(Math.min(1, (26 - entfernung) / 8)) : '0';
     }
     for (const e of fach.values()) {
       const st = aktiveFach[e.daten.id];
@@ -456,7 +604,7 @@ try {
   const ziel = new THREE.Vector3(), v = new THREE.Vector3();
   const KERN_FARBE = new THREE.Color('#fff4ff'), KERN_AUS = new THREE.Color('#5c5670'), KERN_FEHLER = new THREE.Color('#ffb4c2');
   let bilder = 0, messStart = performance.now(), stufe = 0, pulsIst = 0, helligkeit = 1;
-  const materialien = [gasMat, kornMat, staubMat];
+  const materialien = [gasMat, kornMat, staubMat, armGasMat, armKornMat];
 
   function bild() {
     requestAnimationFrame(bild);
@@ -490,6 +638,8 @@ try {
       e.label.style.opacity = sichtbar ? '1' : '0';
     }
     haufenGruppe.rotation.y = reduziert ? 0 : t * 0.012;
+    haufenGruppe.updateMatrixWorld();
+    synapsenAktualisieren(t);
     haufenBeschriften(abstand);
     if (kameraZiel) { camera.position.lerp(kameraZiel, 0.05); if (camera.position.distanceTo(kameraZiel) < 0.3) kameraZiel = null; }
     if (ausgewaehlt) { ausgewaehlt.getWorldPosition(ziel); controls.target.lerp(ziel, 0.06); controls.autoRotate = false; }
@@ -504,7 +654,10 @@ try {
       const fps = bilder * 1000 / (jetzt - messStart);
       if (fps < 38 && stufe < 3) {
         stufe++;
-        if (stufe === 1) { korn.geometry.setDrawRange(0, Math.floor(korn.geometry.attributes.position.count * 0.5)); gas.geometry.setDrawRange(0, Math.floor(gas.geometry.attributes.position.count * 0.6)); }
+        if (stufe === 1) {
+          korn.geometry.setDrawRange(0, Math.floor(korn.geometry.attributes.position.count * 0.5)); gas.geometry.setDrawRange(0, Math.floor(gas.geometry.attributes.position.count * 0.6));
+          for (const o of armTeile) if (o.isPoints) o.geometry.setDrawRange(0, Math.floor(o.geometry.attributes.position.count * 0.5));
+        }
         if (stufe === 2) { pixelRatio = 1; renderer.setPixelRatio(1); materialien.forEach((m) => { m.uniforms.uPixel.value = 1; }); groesseAnpassen(); }
         if (stufe === 3) mitBloom = false;
       }
@@ -513,7 +666,8 @@ try {
   }
   bild();
 
-  api = { setzeAgenten, setzeKatalog, setzeAktive, fokus, auswahlAufheben, setzeSpricht(b) { spricht = !!b; }, setzeHoert(b) { hoert = !!b; } };
+  api = { setzeAgenten, setzeKatalog, setzeAktive, fokus, auswahlAufheben, setzeSpricht(b) { spricht = !!b; }, setzeHoert(b) { hoert = !!b; },
+    get synapsen() { return synapsen.size; }, get bereiche() { return haufen.size; } };
 } catch (err) {
   // Ohne WebGL: ruhige Ersatz-Darstellung, Agenten als antippbare Punkte im Kreis
   console.warn('Wolke ohne WebGL:', err);

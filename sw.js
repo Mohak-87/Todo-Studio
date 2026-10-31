@@ -1,5 +1,5 @@
 /* Todo Studio – Offline-Hülle: Die Oberfläche öffnet sich auch ohne Netz (Daten dann vom letzten Stand). */
-const VERSION = 'studio-v8-wolke';
+const VERSION = 'studio-v9-synapsen';
 const DATEIEN = ['./', 'index.html', 'style.css', 'studio.js', 'jarvis.js', 'wolke.js', 'planer.js', 'demo.js', 'demo-zentrale.js', 'demo-katalog.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
