@@ -165,7 +165,8 @@ const Jarvis = (() => {
 
   function schrittHtml(s) {
     if (s.typ === 'agent') {
-      return `<li><b>${esc(s.name)}</b> <span class="leise">(${esc(s.bereich)} · ${s.rechte === 'web' ? 'mit Websuche' : 'nur Text'} · max. ${s.hoechstMin} Min.)</span><br><span class="leise">${esc(s.briefing.slice(0, 220))}${s.briefing.length > 220 ? ' …' : ''}</span></li>`;
+      const team = s.unterMax ? `<br><span class="leise">${s.leitung ? 'Plant und verteilt' : 'Plant mit seinem Team'}: höchstens ${s.unterMax} von ${(s.teamNamen || []).length} – ${esc((s.teamNamen || []).slice(0, 8).join(', '))}${(s.teamNamen || []).length > 8 ? ' …' : ''}</span>` : '';
+      return `<li><b>${esc(s.name)}</b> <span class="leise">(${esc(s.bereich)} · ${s.rechte === 'web' ? 'mit Websuche' : 'nur Text'} · max. ${s.hoechstMin} Min.)</span>${team}<br><span class="leise">${esc(s.briefing.slice(0, 220))}${s.briefing.length > 220 ? ' …' : ''}</span></li>`;
     }
     if (s.typ === 'katalog') {
       return `<li><b>${esc(s.beschreibung)}</b><br><span class="leise">${s.agenten.slice(0, 12).map((a) => esc(a.name) + ' (' + esc(a.bereichName) + ')').join(', ')}${s.agenten.length > 12 ? ' …' : ''}</span></li>`;
@@ -185,7 +186,10 @@ const Jarvis = (() => {
       <p class="oberzeile">Freigabe · ${STATUS_TEXT[v.status] || esc(v.status)}</p>
       <h3>${esc(v.titel)}</h3>
       ${v.begruendung ? `<p class="leise" style="margin:0">${esc(v.begruendung)}</p>` : ''}
-      ${v.schritte.some((s) => s.typ === 'agent') && v.schritte.filter((s) => s.typ === 'agent').length > 1 ? `<p class="leise" style="margin:6px 0 0">Ablauf: ${v.ablauf === 'kette' ? 'nacheinander, jeder baut auf dem vorherigen auf' : 'parallel'}</p>` : ''}
+      ${v.ablaufName ? `<p class="leise" style="margin:6px 0 0">Ablauf aus dem Katalog: <b>${esc(v.ablaufName)}</b></p>` : ''}
+      ${v.schritte.some((s) => s.typ === 'agent') && v.schritte.filter((s) => s.typ === 'agent').length > 1 ? `<p class="leise" style="margin:6px 0 0">Reihenfolge: ${v.ablauf === 'kette' ? 'nacheinander, jeder baut auf dem vorherigen auf' : 'parallel'}</p>` : ''}
+      ${v.schritte.some((s) => s.typ === 'agent') ? `<p class="leise" style="margin:6px 0 0">Modus: <b>${v.modus === 'gruendlich' ? 'gründlich' : 'schnell'}</b> – ${v.modus === 'gruendlich' ? 'ausführliche Ergebnisse, stärkstes Modell, dauert deutlich länger' : 'kompakte Ergebnisse in wenigen Minuten' + (v.ablauf === 'kette' && v.schritte.filter((s) => s.typ === 'agent').length > 2 ? ', Schritt 1 zuerst, danach parallel' : '')}</p>` : ''}
+      ${v.pruefen ? `<p class="leise" style="margin:6px 0 0">Zum Schluss: Qualitätsprüfung, bei Mängeln eine Überarbeitung · höchstens ${v.laeufe} Läufe insgesamt</p>` : ''}
       <ol>${v.schritte.map(schrittHtml).join('')}</ol>
       ${aktiv ? `<div class="knopf-reihe" style="margin-top:8px">
         ${v.status === 'zurueckgestellt' ? `<button class="knopf klein" data-j="verwerfen" data-id="${esc(v.id)}">Verwerfen</button>` : `<button class="knopf klein" data-j="ablehnen" data-id="${esc(v.id)}">Ablehnen</button>`}
@@ -230,13 +234,22 @@ const Jarvis = (() => {
   }
 
   // ---------- Arbeit (Schublade): Aufträge · Bibliothek · Agenten · Meldungen ----------
-  const SITZUNG_STATUS = { bereit: ['wartet auf Bau-Befehl', 'warn'], frage: ['Rückfrage', 'warn'], unklar: ['Abschluss unklar', 'warn'], angehalten: ['angehalten', 'warn'], laeuft: ['läuft', 'gruen'], wartet: ['wartet auf Platz', 'warn'], fertig: ['fertig', 'ok'], fehler: ['Fehler', 'rot'], gestoppt: ['gestoppt', ''], abgebrochen: ['abgebrochen', 'warn'], teilweise: ['teilweise fertig', 'warn'], geplant: ['geplant', ''], arbeitet: ['arbeitet', 'gruen'] };
+  const SITZUNG_STATUS = { bereit: ['wartet auf Bau-Befehl', 'warn'], frage: ['Rückfrage', 'warn'], unklar: ['Abschluss unklar', 'warn'], angehalten: ['angehalten', 'warn'], laeuft: ['läuft', 'gruen'], wartet: ['wartet auf Platz', 'warn'], fertig: ['fertig', 'ok'], fehler: ['Fehler', 'rot'], gestoppt: ['gestoppt', ''], abgebrochen: ['abgebrochen', 'warn'], teilweise: ['teilweise fertig', 'warn'], prueft: ['wird geprüft', 'gruen'], ueberarbeitet: ['wird überarbeitet', 'warn'], geplant: ['geplant', ''], arbeitet: ['arbeitet', 'gruen'] };
+  const PRUEFUNG = { laeuft: 'läuft', bestanden: 'bestanden', ueberarbeitet: 'Mängel gefunden, überarbeitet', fehler: 'nicht möglich' };
   const PHASE = { bau: 'baut', antwort: 'arbeitet mit Antwort', anstoss: 'angestoßen', fortsetzen: 'setzt fort', korrektur: 'korrigiert', test: 'wird getestet' };
   const stoppbar = (s) => s.art === 'bau' ? !['fertig', 'gestoppt'].includes(s.status) : ['laeuft', 'wartet'].includes(s.status);
   const arbeit = { reiter: 'auftraege', bib: null, bibSuche: '', agentSuche: '', offen: new Set() };
 
   async function katalogLaden() {
-    if (!j.zustand || (j.katalog && j.katalog.version === j.zustand.katalogVersion)) return;
+    // Ohne Zentrale: mitgelieferten Katalog zeigen, damit die Wolke nie leer ist (eigene Agenten kommen mit der Verbindung dazu)
+    if (!j.zustand) {
+      if (!j.katalog && window.DEMO_KATALOG) {
+        j.katalog = window.DEMO_KATALOG;
+        if (window.Wolke && Wolke.setzeKatalog) Wolke.setzeKatalog(j.katalog);
+      }
+      return;
+    }
+    if (j.katalog && j.katalog.version === j.zustand.katalogVersion) return;
     try {
       j.katalog = await zentrale('GET', '/api/katalog');
       if (window.Wolke && Wolke.setzeKatalog) Wolke.setzeKatalog(j.katalog);
@@ -260,11 +273,13 @@ const Jarvis = (() => {
       const [txt, kl] = SITZUNG_STATUS[a.status] || [a.status, ''];
       return `<li style="flex-direction:column;gap:6px">
         <span class="titel"><b>${esc(a.titel)}</b></span>
-        <span class="chips"><span class="chip ${kl}">${txt}</span><span class="chip">${a.ablauf === 'kette' ? 'nacheinander' : 'parallel'}</span><span class="chip">${a.schritte.length} Agent${a.schritte.length === 1 ? '' : 'en'}</span></span>
+        <span class="chips"><span class="chip ${kl}">${txt}</span>${a.ablaufName ? `<span class="chip">${esc(a.ablaufName)}</span>` : ''}${a.modus === 'gruendlich' ? '<span class="chip">gründlich</span>' : ''}<span class="chip">${a.ablauf === 'kette' ? 'nacheinander' : 'parallel'}</span><span class="chip">${a.schritte.length} Agent${a.schritte.length === 1 ? '' : 'en'}</span></span>
         <span class="team-schritte">${a.schritte.map((s) => {
           const [st, sk] = SITZUNG_STATUS[s.status] || [s.status, ''];
-          return `<span class="team-schritt"><span class="chip ${sk}">${st}</span> ${esc(s.name)}${s.ergebnisId ? ` <button class="knopf klein" data-j="bib-oeffnen" data-id="${esc(s.ergebnisId)}">Ergebnis</button>` : ''}${s.fehler ? `<small class="fehlertext">${esc(s.fehler)}</small>` : ''}</span>`;
+          const unter = (s.unter || []).length ? `<span class="team-unter">${s.unter.map((u) => { const [ut, uk] = SITZUNG_STATUS[u.status] || [u.status, '']; return `<span><span class="chip ${uk}">${ut}</span> ${esc(u.name)}${u.ergebnisId ? ` <button class="knopf klein" data-j="bib-oeffnen" data-id="${esc(u.ergebnisId)}">Teil</button>` : ''}</span>`; }).join('')}</span>` : '';
+          return `<span class="team-schritt"><span class="chip ${sk}">${st}</span> ${esc(s.name)}${s.ueberarbeitet ? ' <span class="chip">überarbeitet</span>' : ''}${s.ergebnisId ? ` <button class="knopf klein" data-j="bib-oeffnen" data-id="${esc(s.ergebnisId)}">Ergebnis</button>` : ''}${s.fehler ? `<small class="fehlertext">${esc(s.fehler)}</small>` : ''}${unter}</span>`;
         }).join('')}</span>
+        ${a.pruefung ? `<span class="leise"><b>Qualitätsprüfung:</b> ${esc(PRUEFUNG[a.pruefung.status] || a.pruefung.status)}${a.pruefung.text ? ' – ' + esc(a.pruefung.text) : ''}${a.pruefung.ergebnisId ? ` <button class="knopf klein" data-j="bib-oeffnen" data-id="${esc(a.pruefung.ergebnisId)}">Prüfbericht</button>` : ''}</span>` : ''}
       </li>`;
     }).join('') + '</ul>';
     h += `<p class="gruppe-titel">Claude-Code-Sitzungen · Ordner: ${z.ordner.length ? z.ordner.map(esc).join(', ') : 'keine freigeschaltet'}</p>`;
@@ -305,8 +320,9 @@ const Jarvis = (() => {
     const s = arbeit.agentSuche.toLowerCase();
     let gesamt = 0, h = '';
     for (const b of j.katalog.bereiche) {
-      const treffer = b.agenten.filter((a) => !s || `${a.name} ${a.aufgabe} ${b.name}`.toLowerCase().includes(s));
-      gesamt += b.agenten.length;
+      const passt = (a) => `${a.name} ${a.aufgabe} ${b.name}`.toLowerCase().includes(s);
+      const treffer = b.agenten.filter((a) => !s || passt(a) || (a.unter || []).some(passt));
+      gesamt += b.agenten.length + b.agenten.reduce((n, a) => n + (a.unter || []).length, 0);
       if (!treffer.length) continue;
       const auf = s || arbeit.offen.has(b.id);
       const aktiv = (j.zustand && j.zustand.aktiveAgenten) || {};
@@ -314,11 +330,12 @@ const Jarvis = (() => {
       if (auf) h += '<ul class="liste">' + treffer.map((a) => `<li style="flex-direction:column;gap:4px">
         <span class="titel"><b>${esc(a.name)}</b>${a.leitung ? ' <span class="chip">Leitung</span>' : ''}${a.rechte === 'web' ? ' <span class="chip">Websuche</span>' : ''}${a.eigen ? ' <span class="chip">eigen</span>' : ''}${aktiv[a.id] ? ` <span class="chip gruen">${esc(aktiv[a.id])}</span>` : ''}</span>
         <span class="leise">${esc(a.aufgabe)} → ${esc(a.liefert)}</span>
+        ${(a.unter || []).length ? `<span class="unter-liste">${a.unter.filter((u) => !s || passt(u) || passt(a)).map((u) => `<button class="unter-agent" data-j="unter-zeigen" data-id="${esc(u.id)}" title="${esc(u.aufgabe)}">${esc(u.name)}${aktiv[u.id] ? ' ●' : ''}</button>`).join('')}</span>` : ''}
         <span class="zeile-knoepfe"><button class="knopf klein" data-j="agent-beauftragen" data-id="${esc(a.id)}">Beauftragen …</button><button class="knopf klein" data-j="agent-zeigen" data-id="${esc(a.id)}">In der Wolke zeigen</button></span>
       </li>`).join('') + '</ul>';
       h += '</div>';
     }
-    return `<p class="leise">${gesamt} Fach-Agenten in ${j.katalog.bereiche.length} Bereichen. Neue erschafft Jarvis auf Zuruf („Erstelle mir einen Agenten für …“).</p>` + (h || '<p class="leer">Kein Agent gefunden – Jarvis kann ihn für Sie anlegen.</p>');
+    return `<p class="leise">${gesamt} Fach-Agenten in ${j.katalog.bereiche.length} Bereichen${(j.katalog.ablaeufe || []).length ? `, ${j.katalog.ablaeufe.length} feste Abläufe` : ''}. Spezialisten planen mit ihren Unteragenten. Neue erschafft Jarvis auf Zuruf („Erstelle mir einen Agenten für …“).</p>` + (h || '<p class="leer">Kein Agent gefunden – Jarvis kann ihn für Sie anlegen.</p>');
   }
 
   function meldungenHtml(z) {
@@ -384,7 +401,15 @@ const Jarvis = (() => {
 
   function agentZuKarte(id) {
     if (!j.katalog) return null;
-    for (const b of j.katalog.bereiche) { const a = b.agenten.find((x) => x.id === id); if (a) return { ...a, bereichName: b.name, art: 'fach', status: ((j.zustand && j.zustand.aktiveAgenten) || {})[id] || 'bereit' }; }
+    const status = ((j.zustand && j.zustand.aktiveAgenten) || {})[id] || 'bereit';
+    for (const b of j.katalog.bereiche) {
+      const a = b.agenten.find((x) => x.id === id);
+      if (a) return { ...a, bereichName: b.name, art: 'fach', status };
+      for (const sp of b.agenten) {
+        const u = (sp.unter || []).find((x) => x.id === id);
+        if (u) return { ...u, bereichName: b.name, art: 'fach', unteragent: true, elternName: sp.name, elternId: sp.id, status };
+      }
+    }
     return null;
   }
 
@@ -441,6 +466,7 @@ const Jarvis = (() => {
       eingabe.focus();
       $('#agentKarte').hidden = true;
     }
+    if (was === 'unter-zeigen') { const a = agentZuKarte(id); if (a) { const r = el.getBoundingClientRect(); agentKarte(a, r.left, r.top); } }
     if (was === 'agent-zeigen') { Studio.oeffne('jarvis'); if (window.Wolke && Wolke.fokus) Wolke.fokus(id); }
     if (was === 'kanal-kopieren') { const k = j.zustand && j.zustand.ntfy && j.zustand.ntfy.kanal; if (k) navigator.clipboard.writeText(k).then(() => toast('Kanalname kopiert.'), () => toast(k)); }
     if (was === 'ntfy') {
@@ -725,12 +751,14 @@ const Jarvis = (() => {
       ${agent.letzteAktion ? `<p class="leise">Zuletzt (${zuletzt}): ${esc(agent.letzteAktion)}</p>` : ''}
       ${agent.art === 'fach' ? `<dl class="steckbrief">
         <dt>Bereich</dt><dd>${esc(agent.bereichName || '')}</dd>
-        <dt>Rolle</dt><dd>${agent.leitung ? 'Leitung – plant größere Aufträge im Bereich und verteilt sie' : 'Spezialist'}${agent.eigen ? ' · selbst erstellt' : ''}</dd>
+        <dt>Rolle</dt><dd>${agent.unteragent ? `Unteragent im Team von „${esc(agent.elternName)}“ – übernimmt Teilaufgaben, die sein Spezialist ihm zuteilt` : agent.leitung ? 'Leitung – plant größere Aufträge im Bereich und verteilt sie an die Spezialisten' : (agent.unter || []).length ? `Spezialist mit ${agent.unter.length} Unteragenten – plant seinen Teil und führt die Ergebnisse zusammen` : 'Spezialist'}${agent.eigen ? ' · selbst erstellt' : ''}</dd>
+        ${agent.methode ? `<dt>Arbeitsweise</dt><dd>${esc(agent.methode)}</dd>` : ''}
+        ${(agent.unter || []).length ? `<dt>Team</dt><dd>${esc(agent.unter.map((u) => u.name).join(', '))}</dd>` : ''}
         <dt>Liefert</dt><dd>${esc(agent.liefert || '')}</dd>
         <dt>Rechte</dt><dd>${agent.rechte === 'web' ? 'Text + Websuche (nur lesen, mit Quellen)' : 'Nur Text – arbeitet mit Ihrem Auftrag und dem gemeinsamen Wissen'}</dd>
         <dt>Darf nie</dt><dd>veröffentlichen, senden, kaufen, löschen – liefert nur Entwürfe</dd>
         <dt>Start</dt><dd>nur nach Ihrer Freigabe, über Jarvis</dd>
-      </dl><div class="knopf-reihe"><button class="knopf klein haupt-knopf" data-j="agent-beauftragen" data-id="${esc(agent.id)}">Beauftragen …</button></div>` : ''}
+      </dl><div class="knopf-reihe"><button class="knopf klein haupt-knopf" data-j="agent-beauftragen" data-id="${esc(agent.unteragent ? agent.elternId : agent.id)}">${agent.unteragent ? 'Spezialist beauftragen …' : 'Beauftragen …'}</button></div>` : ''}
       ${s ? `<div class="zeilen">${esc(s.letzteZeilen.join('\n'))}</div><div class="knopf-reihe"><button class="knopf klein" data-j="details" data-id="${esc(s.id)}">Protokoll</button>${stoppbar(s) ? `<button class="knopf klein gefahr" data-j="stoppen" data-id="${esc(s.id)}">${s.art === 'bau' ? 'Abbrechen' : 'Stoppen'}</button>` : ''}</div>` : ''}
       <div class="knopf-reihe" style="margin-top:10px"><button class="knopf klein" id="agentKarteZu">Schließen</button></div>`;
     k.hidden = false;

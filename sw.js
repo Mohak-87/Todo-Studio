@@ -1,9 +1,10 @@
 /* Todo Studio – Offline-Hülle: Die Oberfläche öffnet sich auch ohne Netz (Daten dann vom letzten Stand). */
-const VERSION = 'studio-v10-handy';
+const VERSION = 'studio-v13-schnell';
 const DATEIEN = ['./', 'index.html', 'style.css', 'studio.js', 'jarvis.js', 'wolke.js', 'planer.js', 'demo.js', 'demo-zentrale.js', 'demo-katalog.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(DATEIEN)).then(() => self.skipWaiting()));
+  // Einzeln zwischenspeichern: fehlt eine Datei (z. B. ein Icon), scheitert nicht die ganze Offline-Hülle
+  e.waitUntil(caches.open(VERSION).then((c) => Promise.all(DATEIEN.map((f) => c.add(f).catch(() => {})))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

@@ -361,6 +361,7 @@ code.kanal { font: 13px ui-monospace, Consolas, monospace; background: rgba(255,
   }
   .chat-knopf:active { transform: scale(.94); }
   body.chat-offen .chat-knopf { opacity: 0; transform: scale(.7); pointer-events: none; }
+  body:has(#schublade:not([hidden])) .chat-knopf { display: none; }
   .chat-knopf .zaehler { position: absolute; top: -3px; right: -3px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--warn); color: #1a1205; font-size: .72rem; font-weight: 700; display: grid; place-items: center; }
   .chat-knopf .zaehler[hidden] { display: none; }
   .schublade { left: 8px; right: 8px; width: auto; top: calc(var(--kopf-h) + 16px + env(safe-area-inset-top)); bottom: calc(var(--dock-h) + 16px + env(safe-area-inset-bottom)); z-index: 9; }
@@ -378,3 +379,9 @@ code.kanal { font: 13px ui-monospace, Consolas, monospace; background: rgba(255,
 .prompt-block { margin-top: 10px; border: 1px solid var(--kante); border-radius: 12px; background: rgba(0, 0, 0, .25); overflow: hidden; white-space: normal; }
 .prompt-kopf { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--kante); font-size: .75rem; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; }
 .prompt-block pre { margin: 0; padding: 10px 12px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: .78rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--text-2, inherit); }
+
+/* Agenten-Hierarchie: Unteragenten und Teamschritte */
+.unter-liste { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.unter-agent { border: 1px solid var(--kante); background: rgba(255, 255, 255, .04); color: var(--text-2); border-radius: 999px; padding: 3px 10px; font-size: .74rem; }
+.unter-agent:hover { border-color: var(--kante-hell); color: var(--text); }
+.team-unter { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 4px 0 0 18px; font-size: .78rem; color: var(--text-2); }

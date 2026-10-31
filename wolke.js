@@ -346,12 +346,39 @@ try {
     }, armKornMat, haufenGruppe));
   }
 
+  // Unteragenten als kleine Lichtpunkte rund um ihren Spezialisten
+  const unter = new Map();   // agentId -> { pos (lokal), index, eltern, bereich, daten }
+  let unterPunkte = null;
+  const UNTER_FARBE = new THREE.Color('#aab8d6');
+  const unterAuswahl = new THREE.Object3D(); // Stellvertreter für Auswahl/Fokus eines Unteragenten
+  haufenGruppe.add(unterAuswahl);
+
+  function unterBauen(liste) {
+    if (unterPunkte) { haufenGruppe.remove(unterPunkte); unterPunkte.geometry.dispose(); unterPunkte.material.dispose(); unterPunkte = null; }
+    unter.clear();
+    if (!liste.length) return;
+    const pos = new Float32Array(liste.length * 3), col = new Float32Array(liste.length * 3);
+    liste.forEach((u, i) => {
+      pos.set([u.pos.x, u.pos.y, u.pos.z], i * 3);
+      col.set([UNTER_FARBE.r, UNTER_FARBE.g, UNTER_FARBE.b], i * 3);
+      unter.set(u.daten.id, { ...u, index: i });
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    unterPunkte = new THREE.Points(geo, new THREE.PointsMaterial({ map: LEUCHT, size: 0.22, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }));
+    unterPunkte.renderOrder = 4;
+    haufenGruppe.add(unterPunkte);
+  }
+
+  function unterWelt(u, v) { return v.copy(u.pos).applyMatrix4(haufenGruppe.matrixWorld); }
+
   function setzeKatalog(k) {
     for (const e of fach.values()) { haufenGruppe.remove(e.sprite); e.sprite.material.dispose(); if (e.label) e.label.remove(); }
     for (const h of haufen.values()) { haufenGruppe.remove(h.glanz); h.label.remove(); }
     fach.clear(); haufen.clear();
     const bereiche = k.bereiche || [];
-    const arme = [];
+    const arme = [], unterListe = [];
     bereiche.forEach((b, i) => {
       const richtung = fibonacci(i, bereiche.length);
       // Näher am Kern als früher (24 → 15): die Haufen sitzen am Rand derselben Wolke
@@ -374,8 +401,14 @@ try {
         sprite.userData.fachId = a.id;
         haufenGruppe.add(sprite);
         fach.set(a.id, { sprite, label: null, daten: a, basis, bereich: b.id });
+        // Team des Spezialisten: kleine Kugel aus Punkten um ihn herum
+        (a.unter || []).forEach((u, m) => {
+          const q = fibonacci(m, Math.max(a.unter.length, 2)).multiplyScalar(0.42 + (m % 2) * 0.14).add(p);
+          unterListe.push({ pos: q, eltern: a.id, bereich: b.id, daten: { ...u, elternName: a.name } });
+        });
       });
     });
+    unterBauen(unterListe);
     armeBauen(arme);
     setzeAktive(aktiveFach);
   }
@@ -425,6 +458,12 @@ try {
       soll.set('a:' + id, { ziel: (v) => e.sprite.getWorldPosition(v), via: null, farbe: st === 'wartet' || st === 'meldet' ? SYN_WARN : st === 'haengt' ? SYN_FEHLER : null });
     }
     for (const [id, st] of Object.entries(aktiveFach)) {
+      const u = unter.get(id);
+      if (u && AKTIV.has(st)) {
+        const sp = fach.get(u.eltern);
+        soll.set('u:' + id, { ziel: (v) => unterWelt(u, v), via: sp ? (v) => sp.sprite.getWorldPosition(v) : null, farbe: st === 'wartet' ? SYN_WARN : null });
+        continue;
+      }
       const e = fach.get(id);
       if (!e || !AKTIV.has(st)) continue;
       const hf = haufen.get(e.bereich);
@@ -479,10 +518,21 @@ try {
       const st = aktiveFach[id];
       e.sprite.material.color.set(st ? (FARBEN[st] || '#ffffff') : (e.daten.leitung ? '#ffffff' : '#cfd9ee'));
     }
+    if (unterPunkte) {
+      const col = unterPunkte.geometry.attributes.color, c = new THREE.Color();
+      for (const [id, u] of unter) {
+        const st = aktiveFach[id];
+        c.copy(st ? new THREE.Color(FARBEN[st] || '#ffffff') : UNTER_FARBE);
+        col.setXYZ(u.index, c.r, c.g, c.b);
+      }
+      col.needsUpdate = true;
+    }
   }
 
   function fokus(id) {
-    const e = fach.get(id);
+    let e = fach.get(id);
+    const u = !e && unter.get(id);
+    if (u) { unterAuswahl.position.copy(u.pos); unterAuswahl.userData.fachId = id; e = { sprite: unterAuswahl }; }
     if (!e) return;
     ausgewaehlt = e.sprite;
     const ziel = new THREE.Vector3();
@@ -572,6 +622,22 @@ try {
       const x = (p.x + 1) / 2 * rect.width + rect.left, y = (1 - p.y) / 2 * rect.height + rect.top;
       const d = Math.hypot(x - ev.clientX, y - ev.clientY);
       if (d < bestAbstand) { bestAbstand = d; bestes = s; }
+    }
+    // Unteragenten: erst wählbar, wenn man in ihren Haufen hineingezoomt hat (sonst trifft man sie aus Versehen)
+    let unterTreffer = null, unterAbstand = Math.min(bestAbstand, radius * 0.8);
+    for (const [id, u] of unter) {
+      unterWelt(u, p);
+      if (camera.position.distanceTo(p) > 9) continue;
+      p.project(camera);
+      if (p.z > 1) continue;
+      const x = (p.x + 1) / 2 * rect.width + rect.left, y = (1 - p.y) / 2 * rect.height + rect.top;
+      const d = Math.hypot(x - ev.clientX, y - ev.clientY);
+      if (d < unterAbstand) { unterAbstand = d; unterTreffer = id; }
+    }
+    if (unterTreffer) {
+      unterAuswahl.position.copy(unter.get(unterTreffer).pos);
+      unterAuswahl.userData.fachId = unterTreffer;
+      return unterAuswahl;
     }
     return bestes;
   }
@@ -668,7 +734,7 @@ try {
   bild();
 
   api = { setzeAgenten, setzeKatalog, setzeAktive, fokus, auswahlAufheben, setzeSpricht(b) { spricht = !!b; }, setzeHoert(b) { hoert = !!b; },
-    get synapsen() { return synapsen.size; }, get bereiche() { return haufen.size; } };
+    get synapsen() { return synapsen.size; }, get bereiche() { return haufen.size; }, get unteragenten() { return unter.size; } };
 } catch (err) {
   // Ohne WebGL: ruhige Ersatz-Darstellung, Agenten als antippbare Punkte im Kreis
   console.warn('Wolke ohne WebGL:', err);
