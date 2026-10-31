@@ -242,6 +242,29 @@ try {
   halo.scale.setScalar(11);
   scene.add(halo);
 
+  // ---------- MO spricht: Impulse nur am Kern (Silbenrhythmus + Schallwellen-Ringe) ----------
+  function ringTextur() {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const r = g.createRadialGradient(64, 64, 34, 64, 64, 62);
+    r.addColorStop(0, 'rgba(255,255,255,0)'); r.addColorStop(0.55, 'rgba(255,255,255,.9)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
+  const RING = ringTextur();
+  const ringe = Array.from({ length: 7 }, () => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: RING, color: new THREE.Color('#c9a8ff'), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    sp.renderOrder = 3; scene.add(sp);
+    return { sp, alter: 99, staerke: 0 };
+  });
+  let kernStoss = 0, naechsteSilbe = 0, letzteGrenze = -9;
+  /** Ein Sprech-Impuls: Kern zuckt auf, ein Ring läuft nach außen. */
+  function sprechImpuls(staerke = 1) {
+    kernStoss = Math.min(1.4, kernStoss + 0.55 * staerke);
+    const r = ringe.reduce((a, b) => (a.alter > b.alter ? a : b));
+    r.alter = 0; r.staerke = staerke;
+  }
+
   // ---------- Sub-Agenten ----------
   const agentenGruppe = new THREE.Group();
   scene.add(agentenGruppe);
@@ -591,7 +614,8 @@ try {
     composer.setSize(w, h);
     bloom.resolution.set(w * (schwach ? 0.35 : 0.5), h * (schwach ? 0.35 : 0.5));
     camera.aspect = w / h;
-    if (w > 860) camera.setViewOffset(w, h, (Math.min(420, w - 32) + 16) / 2, 0, w, h);
+    const chatOffen = document.body.classList.contains('chat-offen');
+    if (w > 860) camera.setViewOffset(w, h, chatOffen ? (Math.min(420, w - 32) + 16) / 2 : 0, 0, w, h);
     else camera.setViewOffset(w, h, 0, document.body.classList.contains('chat-offen') ? Math.round(h * 0.2) : Math.round(h * 0.03), w, h);
     camera.updateProjectionMatrix();
   }
@@ -677,15 +701,29 @@ try {
     requestAnimationFrame(bild);
     if (document.hidden) return;
     const t = uhr.getElapsedTime();
-    const pulsSoll = jarvisStatus === 'denkt' ? 1 : spricht ? 0.75 : hoert ? 0.5 : 0;
+    const pulsSoll = jarvisStatus === 'denkt' ? 1 : spricht ? 0.15 : hoert ? 0.5 : 0;
     pulsIst += (pulsSoll - pulsIst) * 0.05;
     helligkeit += ((jarvisStatus === 'getrennt' ? 0.45 : 1) - helligkeit) * 0.03;
     for (const m of materialien) { m.uniforms.uZeit.value = t; m.uniforms.uPuls.value = pulsIst; }
     renderer.toneMappingExposure = 0.55 + 0.5 * helligkeit;
     const atem = 1 + Math.sin(t * (1.1 + pulsIst * 4)) * (0.05 + pulsIst * 0.08);
-    kern.scale.setScalar(2.6 * atem);
+    // Silbenrhythmus, solange MO spricht (Wortgrenzen der Stimme geben zusätzlich den Takt vor)
+    if (spricht && !reduziert && t >= naechsteSilbe) {
+      const ohneGrenze = t - letzteGrenze > 0.6; // meldet die Stimme keine Wortgrenzen, übernimmt der Rhythmus
+      sprechImpuls(ohneGrenze ? 0.55 + Math.random() * 0.5 : 0.3 + Math.random() * 0.25);
+      naechsteSilbe = t + 0.11 + Math.random() * 0.17 + (Math.random() < 0.12 ? 0.25 : 0); // kleine Sprechpausen
+    }
+    kernStoss *= spricht ? 0.86 : 0.9;
+    kern.scale.setScalar(2.6 * atem * (1 + kernStoss * 0.42));
+    for (const r of ringe) {
+      if (r.alter > 1.4) { r.sp.material.opacity = 0; continue; }
+      r.alter += 1 / 60;
+      const u = r.alter / 1.4;
+      r.sp.scale.setScalar(2.4 + u * 9 * (0.7 + r.staerke * 0.3));
+      r.sp.material.opacity = (1 - u) * (1 - u) * 0.85 * r.staerke * helligkeit;
+    }
     kern.material.color.copy(jarvisStatus === 'getrennt' ? KERN_AUS : jarvisStatus === 'fehler' ? KERN_FEHLER : KERN_FARBE);
-    halo.material.opacity = (0.25 + pulsIst * 0.25) * helligkeit;
+    halo.material.opacity = (0.25 + pulsIst * 0.25 + kernStoss * 0.22) * helligkeit;
     bloom.strength = (schwach ? 0.6 : 0.75) + pulsIst * 0.35;
 
     const abstand = camera.position.distanceTo(controls.target);
@@ -733,7 +771,9 @@ try {
   }
   bild();
 
-  api = { setzeAgenten, setzeKatalog, setzeAktive, fokus, auswahlAufheben, setzeSpricht(b) { spricht = !!b; }, setzeHoert(b) { hoert = !!b; },
+  api = { setzeAgenten, setzeKatalog, setzeAktive, fokus, auswahlAufheben, setzeSpricht(b) { spricht = !!b; if (spricht) sprechImpuls(1); }, setzeHoert(b) { hoert = !!b; },
+    /** Wortgrenze der Stimme → Impuls genau im Takt */
+    sprichtImpuls() { letzteGrenze = uhr.getElapsedTime(); sprechImpuls(0.75 + Math.random() * 0.35); },
     get synapsen() { return synapsen.size; }, get bereiche() { return haufen.size; }, get unteragenten() { return unter.size; } };
 } catch (err) {
   // Ohne WebGL: ruhige Ersatz-Darstellung, Agenten als antippbare Punkte im Kreis
@@ -765,3 +805,12 @@ try {
 
 window.Wolke = api;
 if (window.Jarvis) { api.setzeAgenten(Jarvis.agentenStand.agenten, Jarvis.agentenStand.jarvis); if (Jarvis.katalog) api.setzeKatalog(Jarvis.katalog); }
+// Falls der Katalog erst nach der Wolke ankommt: einige Sekunden lang nachsehen
+{
+  let versuche = 0;
+  const nachsehen = setInterval(() => {
+    versuche++;
+    if (api.bereiche > 0 || versuche > 30) { clearInterval(nachsehen); return; }
+    if (window.Jarvis && Jarvis.katalog && api.setzeKatalog) api.setzeKatalog(Jarvis.katalog);
+  }, 1000);
+}

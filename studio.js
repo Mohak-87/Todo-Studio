@@ -232,7 +232,7 @@ const Studio = (() => {
     h += '<ul class="liste" style="margin-top:12px">' + z.termine.map((t) => `<li>
       <button class="haupt" data-aktion="termin-oeffnen" data-id="${esc(t.id)}">
         <span class="titel">${esc(t.titel)}</span>
-        <span class="chips"><span class="chip gruen">${t.ganztags ? 'ganztägig' : esc(t.start + '–' + t.ende)}</span>${t.ort ? `<span class="chip">${esc(t.ort)}</span>` : ''}${t.serie ? '<span class="chip">Serie</span>' : ''}</span>
+        <span class="chips"><span class="chip gruen">${t.ganztags ? 'ganztägig' : esc(t.start + '–' + t.ende)}</span>${t.kalender && !t.hauptkalender ? `<span class="chip">${esc(t.kalender)}</span>` : ''}${t.ort ? `<span class="chip">${esc(t.ort)}</span>` : ''}${t.serie ? '<span class="chip">Serie</span>' : ''}${t.nurLesen ? '<span class="chip">nur lesen</span>' : ''}</span>
       </button></li>`).join('') + '</ul>';
     h += '<p class="leise" style="margin-top:14px">Ändern oder Löschen erfolgt nur nach Ihrer Bestätigung.</p>';
     return h;
@@ -308,6 +308,15 @@ const Studio = (() => {
   }
 
   const DAUERN = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
+  /** Auswahl der deutschen Stimmen dieses Geräts (natürliche zuerst) */
+  function stimmenOptionen(gewaehlt) {
+    const tts = window.speechSynthesis;
+    const de = tts ? tts.getVoices().filter((v) => /^de(-|_|$)/i.test(v.lang)) : [];
+    const rang = (v) => (/natural|neural/i.test(v.name) ? 0 : /premium|enhanced|erweitert/i.test(v.name) ? 1 : /google/i.test(v.name) ? 2 : 3);
+    return `<option value="">Automatisch – MOs Stimme über die Zentrale, sonst beste Browser-Stimme</option>` + de.slice().sort((a, b) => rang(a) - rang(b)).map((v) =>
+      `<option value="${esc(v.name)}" ${v.name === gewaehlt ? 'selected' : ''}>${esc(v.name)}${rang(v) === 0 ? ' ★ natürlich' : ''}</option>`).join('');
+  }
+
   const KNOEPFE = (haupt, loeschen) => `<div class="knopf-reihe" style="flex-direction:row-reverse;justify-content:flex-start">
       <button class="knopf haupt-knopf" value="speichern">${haupt}</button>
       <button class="knopf" value="abbrechen" formnovalidate>Abbrechen</button>
@@ -346,6 +355,17 @@ const Studio = (() => {
   }
 
   async function terminDialog(t, vorschlag) {
+    // Termine aus Kalendern, die Sie nur lesen dürfen: anzeigen, aber nicht bearbeiten
+    if (t && t.nurLesen) {
+      await dialogOeffnen(`<h2>${esc(t.titel)}</h2>
+        <p>${terminText(t)}</p>
+        ${t.ort ? `<p class="leise">Ort: ${esc(t.ort)}</p>` : ''}
+        ${t.notizen ? `<p class="leise">${esc(t.notizen).slice(0, 600)}</p>` : ''}
+        <p class="leise">Kalender „${esc(t.kalender || '')}“ – für Sie nur lesbar, deshalb hier nicht änderbar.</p>
+        ${t.link ? `<p class="leise"><a href="${esc(t.link)}" target="_blank" rel="noopener">In Google Kalender öffnen</a></p>` : ''}
+        <div class="knopf-reihe"><button class="knopf" value="abbrechen" formnovalidate>Schließen</button></div>`);
+      return;
+    }
     const neu = !t;
     const v = t || {
       titel: (vorschlag && vorschlag.titel) || '', datum: (vorschlag && vorschlag.datum) || z.termineDatum,
@@ -402,6 +422,12 @@ const Studio = (() => {
       <p class="hilfe">Optional – nur für MO und Claude-Aufgaben. Adresse: zeigt <b>tailscale-einrichten.cmd</b> an. Schlüssel: im Ordner <i>zentrale</i> den Befehl <code>node zentrale.mjs --schluessel</code> ausführen.</p>
       <p class="abschnitt">Sprache</p>
       <label class="check"><input type="checkbox" name="aufJarvisHoeren" ${cfg.aufJarvisHoeren ? 'checked' : ''}> Auf das Rufwort „Hey MO“ hören, solange das Studio geöffnet ist</label>
+      <p class="hilfe">„Hey MO“ startet ein Gespräch. Danach reden Sie einfach weiter – ohne Rufwort. Es endet mit „Danke, das war's“ oder wenn eine Weile niemand spricht.</p>
+      <div class="feld-reihe" style="align-items:flex-end">
+        <label class="feld" style="flex:1"><span>Stimme von MO</span><select name="stimmeName">${stimmenOptionen(cfg.stimmeName)}</select></label>
+        <button type="button" class="knopf klein" data-stimme-probe style="margin-bottom:12px">▶ Probe</button>
+      </div>
+      <p class="hilfe">Am natürlichsten klingen Stimmen mit „Natural“ im Namen (im Browser Microsoft Edge) und „Premium“ auf dem iPhone (Einstellungen → Bedienungshilfen → Gesprochene Inhalte → Stimmen).</p>
       <p class="hilfe">Dafür lauscht der Browser dauerhaft; die Spracherkennung läuft über Google (Chrome) bzw. Apple (Safari). Auf dem Handy nur, solange der Bildschirm an und das Studio im Vordergrund ist.</p>
       <p class="abschnitt">Arbeitszeit</p>
       <div class="feld-reihe">
@@ -435,7 +461,7 @@ const Studio = (() => {
     }
     Object.assign(cfg, {
       url, schluessel: (r.daten.schluessel || '').trim(), zentrale, zentraleSchluessel: (r.daten.zentraleSchluessel || '').trim(),
-      beginn: r.daten.beginn || '08:00', ende: r.daten.ende || '18:00', aufJarvisHoeren: r.daten.aufJarvisHoeren === 'on'
+      beginn: r.daten.beginn || '08:00', ende: r.daten.ende || '18:00', aufJarvisHoeren: r.daten.aufJarvisHoeren === 'on', stimmeName: r.daten.stimmeName || ''
     });
     if (window.Jarvis) Jarvis.rufwortAnwenden();
     einstellungenSpeichern();

@@ -141,7 +141,7 @@ const Jarvis = (() => {
     if (m.von === 'jarvis') { j.teil = null; if (j.zustand && j.zustand.jarvis) j.zustand.jarvis.status = 'bereit'; }
     if (j.zustand) j.zustand.chat.push(m);
     if (m.von === 'jarvis') sprechen(m.sprechen || (m.text.length < 160 ? m.text : ''));
-    if (m.von === 'jarvis' && window.innerWidth <= 860 && !document.body.classList.contains('chat-offen')) { j.ungelesen = (j.ungelesen || 0) + 1; ungelesenZeigen(); }
+    if (m.von === 'jarvis' && !document.body.classList.contains('chat-offen')) { j.ungelesen = (j.ungelesen || 0) + 1; ungelesenZeigen(); }
     else if (m.von === 'nutzer') eingabe.value = '';
     chatZeichnen();
   }
@@ -246,6 +246,8 @@ const Jarvis = (() => {
     // Katalog immer laden – auch wenn die Wolke (Modul) noch nicht fertig ist; sie holt ihn sich beim Start ab
     katalogLaden();
     if (!window.Wolke) return;
+    // Selbstheilung: Hat die Wolke den Katalog verpasst (z. B. weil sie später geladen wurde), jetzt nachreichen
+    if (j.katalog && Wolke.setzeKatalog && Wolke.bereiche === 0) Wolke.setzeKatalog(j.katalog);
     window.Wolke.setzeAgenten(agentenStand.agenten, agentenStand.jarvis);
     if (Wolke.setzeAktive) Wolke.setzeAktive((j.zustand && j.zustand.aktiveAgenten) || {});
   }
@@ -498,9 +500,27 @@ const Jarvis = (() => {
   const JA = /^(ja|ja,? bitte|jawohl|freigeben|freigabe erteilt|einverstanden|genehmigt|weiter|ok|okay|passt|ok(ay)?,? (freigeben|los))[.!]?$/i;
   const NEIN = /^(nein|ablehnen|nicht starten|abbrechen)[.!]?$/i;
 
+  /** „Zeig mir meine Aufgaben“, „Welche Termine habe ich?“, „Was steht heute an?“ → passende Ansicht öffnen. */
+  // (?:^|…) statt \b, weil \b vor Umlauten wie „öffne“ nicht greift
+  const ZEIGEN = /(?:^|[\s,.!?„])(zeig\w*|öffne\w*|oeffne\w*|anzeig\w*|aufmach\w*|welche|was (steht|habe ich|hab ich|ist)|wie sieht|liste\s+\w+\s+auf|gib mir|übersicht)(?![a-zäöüß])/i;
+  function ansichtAufZuruf(text) {
+    const t = String(text);
+    if (ABSICHT.test(t)) return null; // „Erstelle eine Aufgabe …“ ist kein Anzeigewunsch
+    const tag = /\b(was steht (heute|morgen)? ?an|mein(en)? tag|tagesplan|heute an)\b/i.test(t);
+    if (!ZEIGEN.test(t) && !tag) return null;
+    if (/\b(aufgaben|to-?dos?|todo-?liste)\b/i.test(t)) return 'aufgaben';
+    if (/\b(termine?|kalender)\b/i.test(t)) return 'termine';
+    if (/\b(ideen?)\b/i.test(t)) return 'ideen';
+    if (/\b(mails?|e-?mails?|posteingang)\b/i.test(t)) return 'mails';
+    if (tag || /\b(heute|tagesübersicht)\b/i.test(t)) return 'heute';
+    return null;
+  }
+
   async function senden(text) {
     text = String(text || '').trim();
     if (!text) return;
+    const ansicht = ansichtAufZuruf(text);
+    if (ansicht) Studio.oeffne(ansicht);
     eingabe.value = '';
     eingabe.style.height = '46px';
     if (j.verbunden) {
@@ -568,13 +588,34 @@ const Jarvis = (() => {
 
   // ---------- Sprache ----------
   let stimme = null;
+  /** Beste deutsche Stimme: zuerst die eigene Wahl, sonst natürliche (neuronale) Stimmen, dann die besseren Standardstimmen. */
+  function deutscheStimmen() { return TTS ? TTS.getVoices().filter((v) => /^de(-|_|$)/i.test(v.lang)) : []; }
   function stimmeWaehlen() {
     if (!TTS) return null;
-    const de = TTS.getVoices().filter((v) => /^de(-|_|$)/i.test(v.lang));
-    const bevorzugt = ['Conrad', 'Killian', 'Florian', 'Markus', 'Yannick', 'Stefan', 'Google Deutsch', 'Anna'];
-    for (const n of bevorzugt) { const v = de.find((x) => x.name.includes(n)); if (v) return v; }
-    return de[0] || null;
+    const de = deutscheStimmen();
+    const eigene = Studio.cfg.stimmeName && de.find((v) => v.name === Studio.cfg.stimmeName);
+    if (eigene) return eigene;
+    // „Online (Natural)“ = neuronale Microsoft-Stimmen (Edge, Windows-Sprachpakete), danach Google und Premium-Stimmen (iPhone)
+    const rang = (v) => (/natural|neural/i.test(v.name) ? 0 : /premium|enhanced|erweitert/i.test(v.name) ? 1 : /google/i.test(v.name) ? 2 : 3);
+    const maennlich = /conrad|killian|florian|ralf|bernd|christoph|kasper|klaus|markus|yannick|stefan|viktor|martin/i;
+    return de.slice().sort((a, b) => rang(a) - rang(b) || (maennlich.test(b.name) ? 1 : 0) - (maennlich.test(a.name) ? 1 : 0))[0] || null;
   }
+  function stimmeProbe(name) {
+    if (!TTS) return;
+    const v = deutscheStimmen().find((x) => x.name === name) || stimmeWaehlen();
+    TTS.cancel();
+    const u = new SpeechSynthesisUtterance('Guten Tag. Ich bin MO. Womit kann ich dienen?');
+    u.lang = 'de-DE'; if (v) u.voice = v; u.rate = 1.02; u.pitch = 0.92;
+    TTS.speak(u);
+  }
+  // Probe-Knopf im Einstellungsdialog
+  document.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-stimme-probe]');
+    if (!b) return;
+    ev.preventDefault();
+    const sel = b.closest('form') && b.closest('form').querySelector('[name="stimmeName"]');
+    stimmeProbe(sel ? sel.value : '');
+  });
   if (TTS) { stimme = stimmeWaehlen(); TTS.onvoiceschanged = () => { stimme = stimmeWaehlen(); }; }
 
   let freigeschaltet = false;
@@ -583,17 +624,123 @@ const Jarvis = (() => {
     if (freigeschaltet || !TTS) return;
     freigeschaltet = true;
     try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; TTS.speak(u); } catch (e) { /* egal */ }
+    try { audioKontext = audioKontext || new (window.AudioContext || window.webkitAudioContext)(); audioKontext.resume(); } catch (e) { /* egal */ }
   }
   document.addEventListener('pointerdown', stimmeFreischalten, { once: true });
 
   // Sprachausgabe. Danach hört MO im Gesprächs-/Rufwort-Modus von selbst wieder zu.
   let sprichtGerade = false, sprechTimer = null;
+  // ---------- MOs eigene Stimme über die Zentrale (Piper) – mit Rückfall auf die Browser-Stimme ----------
+  const moAudio = new Audio();
+  let audioKontext = null, analyse = null, pegelDaten = null, pegelLauf = 0;
+  function zentraleStimmeNutzen() {
+    return !!(j.verbunden && j.zustand && j.zustand.stimme && j.zustand.stimme.bereit && !Studio.cfg.stimmeName && Studio.cfg.zentrale !== 'demo');
+  }
+  /** Lautstärke der Stimme → Impulse am Kern der Wolke (echter Sprechrhythmus) */
+  function pegelVerfolgen() {
+    if (!analyse) {
+      try {
+        audioKontext = audioKontext || new (window.AudioContext || window.webkitAudioContext)();
+        const quelle = audioKontext.createMediaElementSource(moAudio);
+        analyse = audioKontext.createAnalyser(); analyse.fftSize = 512;
+        quelle.connect(analyse); analyse.connect(audioKontext.destination);
+        pegelDaten = new Uint8Array(analyse.fftSize);
+      } catch (e) { return; }
+    }
+    if (audioKontext.state === 'suspended') audioKontext.resume();
+    const lauf = ++pegelLauf;
+    let vorher = 0, oben = false;
+    const schritt = () => {
+      if (lauf !== pegelLauf || moAudio.paused) return;
+      analyse.getByteTimeDomainData(pegelDaten);
+      let s = 0; for (let i = 0; i < pegelDaten.length; i++) { const x = (pegelDaten[i] - 128) / 128; s += x * x; }
+      const rms = Math.sqrt(s / pegelDaten.length);
+      // Silbe = Lautstärke steigt deutlich an
+      if (!oben && rms > 0.06 && rms > vorher * 1.25) { oben = true; if (window.Wolke && Wolke.sprichtImpuls) Wolke.sprichtImpuls(); }
+      if (oben && rms < 0.035) oben = false;
+      vorher = rms * 0.6 + vorher * 0.4;
+      requestAnimationFrame(schritt);
+    };
+    requestAnimationFrame(schritt);
+  }
+  async function stimmeHolen(text) {
+    const res = await fetch(Studio.cfg.zentrale + '/api/stimme', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + Studio.cfg.zentraleSchluessel, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }), signal: AbortSignal.timeout(20000)
+    });
+    if (!res.ok || !/audio/.test(res.headers.get('content-type') || '')) throw new Error('Stimme der Zentrale nicht verfügbar');
+    return URL.createObjectURL(await res.blob());
+  }
+  /**
+   * Satz für Satz: Der erste Satz erklingt, während die Zentrale die nächsten schon rechnet.
+   * Gibt ein Promise zurück, das nach dem letzten Satz erfüllt ist (oder beim ersten Fehler scheitert).
+   */
+  let sprechLauf = 0;
+  async function sprechenZentrale(text) {
+    const lauf = ++sprechLauf;
+    const saetze = String(text).match(/[^.!?…]+[.!?…]*\s*/g)?.map((x) => x.trim()).filter(Boolean) || [String(text)];
+    // nur sehr kurze Sätze zusammenfassen
+    const stuecke = [];
+    for (const x of saetze) { if (stuecke.length > 1 && (stuecke[stuecke.length - 1] + ' ' + x).length < 45) stuecke[stuecke.length - 1] += ' ' + x; else stuecke.push(x); } // Satz für Satz: der nächste wird gerechnet, während der aktuelle läuft
+    const urls = stuecke.map(() => null);
+    let fertigGeholt = 0, fehler = null, weckeAuf = null;
+    (async () => {
+      for (let i = 0; i < stuecke.length && lauf === sprechLauf; i++) {
+        try { urls[i] = await stimmeHolen(stuecke[i]); } catch (e) { fehler = e; }
+        fertigGeholt = i + 1;
+        if (weckeAuf) weckeAuf();
+        if (fehler) break;
+      }
+    })();
+    const warteAuf = (i) => new Promise((ok) => { const p = () => (fertigGeholt > i || fehler ? ok() : (weckeAuf = p)); p(); });
+    for (let i = 0; i < stuecke.length; i++) {
+      await warteAuf(i);
+      if (lauf !== sprechLauf) return;
+      if (!urls[i]) throw fehler || new Error('Stimme fehlt');
+      if (moAudio.src) URL.revokeObjectURL(moAudio.src);
+      moAudio.src = urls[i];
+      await moAudio.play();
+      await new Promise((ok) => { moAudio.onended = ok; moAudio.onerror = ok; });
+    }
+  }
+  moAudio.onplay = () => { if (window.Wolke) Wolke.setzeSpricht(true); pegelVerfolgen(); };
+
   function sprechen(text) {
+    if (!text || !Studio.cfg.stimme) { gesprochen(); return; }
+    if (zentraleStimmeNutzen()) {
+      const satz = String(text).replace(/[„“”"*#_`]/g, '').slice(0, 2400);
+      try { TTS && TTS.cancel(); } catch (e) { /* egal */ }
+      moAudio.pause();
+      hoerenPausieren(); // nicht sich selbst zuhören
+      sprichtGerade = true;
+      const fertig = () => {
+        if (!sprichtGerade) return;
+        sprichtGerade = false; pegelLauf++;
+        if (window.Wolke) Wolke.setzeSpricht(false);
+        gesprochen();
+      };
+      let angefangen = false;
+      const meinLauf = sprechLauf + 1; // sprechenZentrale zählt gleich hoch
+      moAudio.onplaying = () => { angefangen = true; };
+      sprechenZentrale(satz).then(() => { if (meinLauf === sprechLauf) fertig(); }).catch((err) => {
+        // Von einer neueren Ausgabe abgelöst (oder bewusst angehalten): still enden – nie doppelt sprechen
+        if (meinLauf !== sprechLauf || (err && err.name === 'AbortError')) return;
+        // Rückfall: Browser-Stimme nur, wenn von Thorsten noch nichts zu hören war
+        if (angefangen) fertig(); else { sprichtGerade = false; browserSprechen(text); }
+      });
+      return;
+    }
+    browserSprechen(text);
+  }
+
+  function browserSprechen(text) {
     if (!text || !Studio.cfg.stimme || !TTS) { gesprochen(); return; }
+    sprechLauf++; moAudio.pause(); // spricht der Browser, schweigt Thorsten – immer nur eine Stimme
     try {
       TTS.cancel();
       hoerenPausieren(); // nicht sich selbst zuhören
       const satz = String(text).replace(/[„“”"*#_`]/g, '').slice(0, 400);
+      stimme = stimmeWaehlen(); // falls in den Einstellungen gewechselt
       const u = new SpeechSynthesisUtterance(satz);
       u.lang = 'de-DE'; if (stimme) u.voice = stimme;
       u.rate = 1.02; u.pitch = 0.92;
@@ -605,6 +752,7 @@ const Jarvis = (() => {
         gesprochen();
       };
       u.onstart = () => { if (window.Wolke) Wolke.setzeSpricht(true); };
+      u.onboundary = (ev) => { if (ev.name === 'word' && window.Wolke && Wolke.sprichtImpuls) Wolke.sprichtImpuls(); };
       u.onend = u.onerror = fertig;
       sprechTimer = setTimeout(fertig, 2500 + satz.length * 90); // Chrome meldet das Ende nicht immer
       TTS.speak(u);
@@ -619,7 +767,7 @@ const Jarvis = (() => {
   knopfStimme.addEventListener('click', () => {
     if (!TTS) { lokal('jarvis', 'Sprachausgabe ist in diesem Browser nicht verfügbar. Ich antworte weiterhin schriftlich.'); return; }
     Studio.cfg.stimme = !Studio.cfg.stimme; Studio.einstellungenSpeichern(); stimmeKnopf();
-    if (Studio.cfg.stimme) { stimmeFreischalten(); sprechen('Sprachausgabe aktiviert.'); } else TTS.cancel();
+    if (Studio.cfg.stimme) { stimmeFreischalten(); sprechen('Sprachausgabe aktiviert.'); } else { if (TTS) TTS.cancel(); sprechLauf++; moAudio.pause(); }
   });
   stimmeKnopf();
 
@@ -644,7 +792,8 @@ const Jarvis = (() => {
   }
   const ENDE = /^(ende|stopp|stop|schluss|das wars?|das war's|danke,? das war'?s|gespräch beenden|tschüss|auf wiedersehen)[.!]?$/i;
   // Rufwort „Hey MO“ – die Spracherkennung schreibt es unterschiedlich (Mo, Moh, Moe, M. O., …)
-  const RUF = /\b(?:hey|hi|hei|ey|hallo|okay|ok)[,\s]+(?:mo|moh|moe|mow|moo|mö|m\.?\s?o\.?)(?![a-zäöü])[,.!?:]?\s*(.*)$/i;
+  // Die Erkennung schreibt es oft zusammen („Heimo“, „Heymo“, „Haimo“) oder lässt das „Hey“ weg („Mo, …“ am Satzanfang)
+  const RUF = /(?:\b(?:hey|hi|hei|ey|he|hallo|okay|ok)[,\s]*(?:mo|moh|moe|mow|moo|mö|m\.?\s?o\.?)|\b(?:heimo|heymo|haimo|hymo|heimoh|eimo|hailmo)|^\s*(?:mo|moh|moe))(?![a-zäöü])[,.!?:]?\s*(.*)$/i;
   let hinweisKeineSprache = false;
 
   function grundModus() { return Studio.cfg.aufJarvisHoeren && SR ? 'wach' : 'aus'; }
@@ -656,18 +805,37 @@ const Jarvis = (() => {
     if (!hinweisKeineSprache) { hinweisKeineSprache = true; lokal('jarvis', 'Spracheingabe ist hier nicht verfügbar. Schreiben Sie mir einfach – das funktioniert ebenso gut.'); }
   }
 
+  /** Zeigt kurz, was die Spracherkennung im Rufwort-Modus verstanden hat – so sieht man, ob „Hey MO“ ankommt. */
+  let gehoertTimer = null;
+  function gehoertZeigen(text) {
+    const el = $('#eingabeHinweis');
+    if (!el || !String(text).trim()) return;
+    el.hidden = false;
+    el.textContent = RUF.test(text) ? '✓ „Hey MO“ erkannt' : `Gehört: „${String(text).trim().slice(-60)}“ – zum Ansprechen „Hey MO“ sagen`;
+    clearTimeout(gehoertTimer);
+    gehoertTimer = setTimeout(() => { el.hidden = true; }, 3500);
+  }
+
   function anzeigeHoeren() {
     const hoert = !!h.sr;
     $('#knopfMikro').classList.toggle('hoert', hoert && h.modus !== 'wach');
     $('#knopfGespraech').classList.toggle('aktiv', h.modus === 'gespraech');
     $('#knopfGespraech').setAttribute('aria-pressed', String(h.modus === 'gespraech'));
     if (window.Wolke) Wolke.setzeHoert(hoert && (h.modus !== 'wach' || h.befehl));
-    if (h.modus === 'gespraech') statusSetzen(hoert ? 'hört zu …' : h.wartet ? 'denkt …' : 'Gespräch');
-    else if (h.modus === 'wach') statusSetzen(h.befehl ? 'Ja, bitte?' : 'wartet auf „MO“');
+    if (h.modus === 'gespraech') statusSetzen(hoert ? (h.ausRuf ? 'Gespräch – ich höre zu …' : 'hört zu …') : h.wartet ? 'denkt …' : 'Gespräch');
+    else if (h.modus === 'wach') statusSetzen(h.befehl ? 'Ja, bitte?' : 'wartet auf „Hey MO“');
     else if (h.modus === 'einmal') statusSetzen('hört zu …');
   }
 
+  /** Gespräch nach dem Rufwort: wie der 🎧-Modus, endet bei Stille oder „Danke, das war's“ und wartet dann wieder auf „Hey MO“. */
+  function gespraechBeginnen() {
+    h.modus = 'gespraech'; h.ausRuf = true; h.stille = 0; h.befehl = false;
+    anzeigeHoeren();
+    statusSetzen('Gespräch – reden Sie einfach weiter');
+  }
+
   function modusSetzen(m) {
+    h.ausRuf = false;
     h.modus = m; h.stille = 0; h.befehl = false; h.ausloesen = null;
     hoerenPausieren();
     if (m === 'aus') statusSetzen(j.verbunden ? 'bereit' : 'Zentrale offline');
@@ -710,6 +878,7 @@ const Jarvis = (() => {
       endgueltig = '';
       for (let i = 0; i < e.results.length; i++) { t += e.results[i][0].transcript; if (e.results[i].isFinal) endgueltig += e.results[i][0].transcript + ' '; }
       if (!wachen) { eingabe.value = t; return; }
+      gehoertZeigen(t);
       const zwischen = RUF.exec(t);
       if (zwischen) eingabe.value = zwischen[1];
       const ruf = RUF.exec(endgueltig.trim());
@@ -725,15 +894,21 @@ const Jarvis = (() => {
         keineSprache('Das Mikrofon ist gesperrt.');
       } else if (e.error === 'network') {
         keineSprache('Die Spracherkennung braucht eine Internetverbindung.');
+      } else if (e.error === 'audio-capture') {
+        h.modus = 'aus';
+        keineSprache('Es ist kein Mikrofon erreichbar (in Windows/Handy prüfen, ob eines angeschlossen und erlaubt ist).');
       }
     };
+    // Sichtbar machen, dass das Mikrofon wirklich Ton bekommt
+    sr.onaudiostart = () => { if (wachen) statusSetzen('🎙 wartet auf „Hey MO“'); };
     sr.onend = () => {
       if (h.sr !== sr) return;
       h.sr = null;
       anzeigeHoeren();
       if (wachen) {
-        if (h.ausloesen) { const b = h.ausloesen; h.ausloesen = null; eingabe.value = ''; abschicken(b); }
-        else if (h.befehl) { anzeigeHoeren(); setTimeout(hoerenStarten, 150); }
+        // „Hey MO“ startet ein Gespräch: danach hört MO nach jeder Antwort weiter zu – ohne erneutes Rufwort
+        if (h.ausloesen) { const b = h.ausloesen; h.ausloesen = null; eingabe.value = ''; gespraechBeginnen(); abschicken(b); }
+        else if (h.befehl) { h.befehl = false; gespraechBeginnen(); setTimeout(hoerenStarten, 150); }
         else setTimeout(hoerenStarten, 400); // Browser beenden Dauerlauschen gelegentlich – einfach weiter
         return;
       }
@@ -748,14 +923,18 @@ const Jarvis = (() => {
           return;
         }
         h.befehl = false;
-        abschicken(text);
+        // „Mo, …“ am Satzanfang ist im Gespräch erlaubt, wird aber nicht mitgeschickt
+        const ruf = RUF.exec(text);
+        const inhalt = ruf ? ruf[1].trim() : text;
+        if (!inhalt) { h.stille = 0; setTimeout(hoerenStarten, 200); return; }
+        abschicken(inhalt);
         return;
       }
       // Nichts verstanden
       if (h.modus === 'einmal') { modusSetzen(grundModus()); return; }
       if (h.befehl) { h.befehl = false; anzeigeHoeren(); setTimeout(hoerenStarten, 300); return; }
       h.stille++;
-      if (h.stille >= 4) {
+      if (h.stille >= (h.ausRuf ? 3 : 4)) {
         const zurueck = grundModus();
         modusSetzen(zurueck);
         lokal('jarvis', zurueck === 'wach' ? 'Es ist still geworden – ich warte, bis Sie „Hey MO“ sagen.' : 'Es ist still geworden. Ich beende das Gespräch; tippen Sie auf 🎧, um fortzusetzen.');
@@ -822,8 +1001,7 @@ const Jarvis = (() => {
     $('#agentKarteZu').onclick = () => { k.hidden = true; if (window.Wolke) Wolke.auswahlAufheben(); };
   }
 
-  // ---------- Handy: Chat ein-/ausklappen (eingeklappt gehört der Bildschirm der Wolke) ----------
-  const mobil = () => window.innerWidth <= 860;
+  // ---------- Chat ein-/ausklappen (grundsätzlich eingeklappt – der Bildschirm gehört der Wolke) ----------
   function chatUmschalten(offen) {
     if (offen === undefined) offen = !document.body.classList.contains('chat-offen');
     document.body.classList.toggle('chat-offen', offen);
@@ -833,10 +1011,9 @@ const Jarvis = (() => {
   }
   $('#chatKnopf').addEventListener('click', () => { stimmeFreischalten(); chatUmschalten(true); });
   $('#chatZu').addEventListener('click', () => chatUmschalten(false));
-  $('.chat-kopf').addEventListener('click', (ev) => { if (!ev.target.closest('button') && mobil()) chatUmschalten(false); });
+  $('.chat-kopf').addEventListener('click', (ev) => { if (!ev.target.closest('button')) chatUmschalten(false); });
   // Dock „MO“: Schublade schließen und Chat öffnen bzw. (ohne Schublade) ein-/ausklappen
   $('#dock [data-ansicht="jarvis"]').addEventListener('click', () => {
-    if (!mobil()) return;
     chatUmschalten($('#schublade').hidden ? undefined : true);
   }, true);
 
@@ -851,4 +1028,4 @@ const Jarvis = (() => {
     agentKarte, sprechen, agentZuKarte
   };
 })();
-window.Jarvis = MO;
+window.Jarvis = Jarvis;

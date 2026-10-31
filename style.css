@@ -335,7 +335,20 @@ code.kanal { font: 13px ui-monospace, Consolas, monospace; background: rgba(255,
 /* Sitzungen */
 .sitzung .zeilen { font: 12px/1.45 ui-monospace, Consolas, monospace; color: var(--text-2); background: rgba(0, 0, 0, .3); border-radius: 10px; padding: 8px 10px; margin-top: 8px; max-height: 120px; overflow: auto; white-space: pre-wrap; }
 
-.chat-knopf, .chat-zu { display: none; }
+/* Chat grundsätzlich eingeklappt (Laptop und Handy) – der ✦-Knopf klappt ihn auf, ▾ wieder zu */
+.chat { transform: translateX(28px); opacity: 0; visibility: hidden; pointer-events: none; transition: transform .25s ease, opacity .2s ease, visibility 0s linear .25s; }
+body.chat-offen .chat { transform: none; opacity: 1; visibility: visible; pointer-events: auto; transition: transform .25s ease, opacity .2s ease; }
+.chat-zu { display: grid; width: 34px; height: 34px; }
+.chat-knopf {
+  display: grid; place-items: center; position: fixed; z-index: 10; right: 22px; bottom: calc(var(--dock-h) + 30px + env(safe-area-inset-bottom));
+  width: 60px; height: 60px; border-radius: 50%; font-size: 1.5rem; color: var(--jarvis);
+  box-shadow: 0 0 24px rgba(167, 139, 250, .35); transition: transform .2s ease, opacity .2s ease;
+}
+.chat-knopf:hover { transform: scale(1.05); }
+.chat-knopf:active { transform: scale(.94); }
+body.chat-offen .chat-knopf { opacity: 0; transform: scale(.7); pointer-events: none; }
+.chat-knopf .zaehler { position: absolute; top: -3px; right: -3px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--warn); color: #1a1205; font-size: .72rem; font-weight: 700; display: grid; place-items: center; }
+.chat-knopf .zaehler[hidden] { display: none; }
 
 /* Handy & Tablet hochkant: Wolke oben, Chat als Panel unten, Schublade über allem */
 @media (max-width: 860px) {
