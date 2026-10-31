@@ -1,6 +1,6 @@
-/* Todo Studio – Jarvis als Weltraumnebel (violett), Sub-Agenten als helle Partikel darin.
+/* Todo Studio – MO als Weltraumnebel (violett), Sub-Agenten als helle Partikel darin.
    Die Fach-Bereiche hängen als Sternhaufen an Nebelarmen am Kern; arbeitende Agenten sind über
-   leuchtende Synapsen mit Jarvis verbunden, auf denen Signale wandern.
+   leuchtende Synapsen mit MO verbunden, auf denen Signale wandern.
    Three.js mit Leuchteffekt (Bloom). Zoom per Mausrad / Zwei-Finger-Geste, Partikel antippen für Details. */
 
 const canvas = document.getElementById('wolke');
@@ -232,11 +232,11 @@ try {
   sternGeo.setAttribute('color', new THREE.BufferAttribute(sternFarbe, 3));
   scene.add(new THREE.Points(sternGeo, new THREE.PointsMaterial({ size: 0.9, map: LEUCHT, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending })));
 
-  // 5) Kern = Jarvis
+  // 5) Kern = MO
   const kern = new THREE.Sprite(new THREE.SpriteMaterial({ map: LEUCHT, color: new THREE.Color('#fff4ff'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   kern.scale.setScalar(2.6);
   kern.renderOrder = 3;
-  kern.userData.agent = { id: 'jarvis', name: 'Jarvis', aufgabe: 'Hauptagent und Ihr einziger Ansprechpartner. Verteilt Arbeit an die Sub-Agenten und holt vor allem mit Folgen Ihre Freigabe ein.', status: 'bereit' };
+  kern.userData.agent = { id: 'jarvis', name: 'MO', aufgabe: 'Hauptagent und Ihr einziger Ansprechpartner. Verteilt Arbeit an die Sub-Agenten und holt vor allem mit Folgen Ihre Freigabe ein.', status: 'bereit' };
   scene.add(kern);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: LEUCHT, color: new THREE.Color('#7c4dff'), transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }));
   halo.scale.setScalar(11);
@@ -284,7 +284,7 @@ try {
     }
   }
 
-  // ---------- Fach-Agenten: ein Sternhaufen je Bereich (neutral – Violett bleibt Jarvis) ----------
+  // ---------- Fach-Agenten: ein Sternhaufen je Bereich (neutral – Violett bleibt MO) ----------
   const haufenGruppe = new THREE.Group();
   scene.add(haufenGruppe);
   const fach = new Map();      // agentId -> { sprite, label, daten, basis }
@@ -478,7 +478,7 @@ try {
       const syn = synapsen.get(k) || synapseAnlegen(k, d.ziel, d.via, d.farbe);
       syn.soll = 1; syn.ziel = d.ziel; syn.via = d.via;
     }
-    // Gedankenblitze, solange Jarvis über Ihre Nachricht nachdenkt: kurze Impulse in die Bereiche
+    // Gedankenblitze, solange MO über Ihre Nachricht nachdenkt: kurze Impulse in die Bereiche
     if (jarvisStatus === 'denkt' && !reduziert && t > naechsterBlitz && fach.size) {
       naechsterBlitz = t + 0.35 + Math.random() * 0.45;
       const alle = [...fach.values()];
@@ -502,7 +502,7 @@ try {
       const flackern = syn.blitz ? 1 : 0.8 + Math.sin(t * 7 + syn.tempo * 10) * 0.2;
       syn.linie.material.opacity = syn.staerke * (syn.blitz ? 0.55 : 0.6) * flackern;
       syn.perlen.material.opacity = syn.staerke * (syn.blitz ? 0.35 : 0.45) * flackern;
-      // Signale wandern vom Kern zum Agenten (Jarvis schickt Arbeit) – beim Blitz nur eines
+      // Signale wandern vom Kern zum Agenten (MO schickt Arbeit) – beim Blitz nur eines
       syn.signale.forEach((s, i) => {
         if (syn.blitz && i > 0) { s.sp.material.opacity = 0; return; }
         const u = reduziert ? 0.5 : (t * syn.tempo + s.versatz) % 1;

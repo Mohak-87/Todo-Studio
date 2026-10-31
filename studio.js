@@ -249,7 +249,7 @@ const Studio = (() => {
   function zeigeIdeen() {
     if (!cfg.url) return OHNE_GOOGLE;
     if (!z.ideen) { ideenLaden(); return LADEN; }
-    let h = '<p class="leise">Ihr Ideen- und Erinnerungsspeicher. Sagen Sie Jarvis einfach „Idee: …“.</p>';
+    let h = '<p class="leise">Ihr Ideen- und Erinnerungsspeicher. Sagen Sie MO einfach „Idee: …“.</p>';
     if (!z.ideen.length) return h + '<p class="leer">Noch keine Ideen gespeichert.</p>';
     h += '<ul class="liste">' + z.ideen.map((i) => `<li style="flex-direction:column;gap:8px">
       <span class="titel">${esc(i.text)}</span>
@@ -396,12 +396,12 @@ const Studio = (() => {
       <label class="feld"><span>Web-App-URL (endet auf /exec)</span><input name="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.url === 'demo' ? '' : cfg.url)}"></label>
       <label class="feld"><span>Studio-Schlüssel</span><input name="schluessel" type="password" autocomplete="off" value="${esc(cfg.schluessel)}"></label>
       <p class="hilfe">Beides finden Sie auf script.google.com in Ihrem Projekt: URL unter „Bereitstellen → Bereitstellungen verwalten“, Schlüssel unter „Projekteinstellungen → Skripteigenschaften“ (STUDIO_SCHLUESSEL).</p>
-      <p class="abschnitt">Zentrale auf dem Laptop (Jarvis & Claude)</p>
+      <p class="abschnitt">Zentrale auf dem Laptop (MO & Claude)</p>
       <label class="feld"><span>Zentrale-Adresse (https://…ts.net)</span><input name="zentrale" inputmode="url" placeholder="https://ihr-laptop.tailxxxx.ts.net" value="${esc(cfg.zentrale === 'demo' ? '' : cfg.zentrale)}"></label>
       <label class="feld"><span>Kopplungsschlüssel der Zentrale</span><input name="zentraleSchluessel" type="password" autocomplete="off" value="${esc(cfg.zentraleSchluessel)}"></label>
-      <p class="hilfe">Optional – nur für Jarvis und Claude-Aufgaben. Adresse: zeigt <b>tailscale-einrichten.cmd</b> an. Schlüssel: im Ordner <i>zentrale</i> den Befehl <code>node zentrale.mjs --schluessel</code> ausführen.</p>
+      <p class="hilfe">Optional – nur für MO und Claude-Aufgaben. Adresse: zeigt <b>tailscale-einrichten.cmd</b> an. Schlüssel: im Ordner <i>zentrale</i> den Befehl <code>node zentrale.mjs --schluessel</code> ausführen.</p>
       <p class="abschnitt">Sprache</p>
-      <label class="check"><input type="checkbox" name="aufJarvisHoeren" ${cfg.aufJarvisHoeren ? 'checked' : ''}> Auf das Rufwort „Jarvis“ hören, solange das Studio geöffnet ist</label>
+      <label class="check"><input type="checkbox" name="aufJarvisHoeren" ${cfg.aufJarvisHoeren ? 'checked' : ''}> Auf das Rufwort „Hey MO“ hören, solange das Studio geöffnet ist</label>
       <p class="hilfe">Dafür lauscht der Browser dauerhaft; die Spracherkennung läuft über Google (Chrome) bzw. Apple (Safari). Auf dem Handy nur, solange der Bildschirm an und das Studio im Vordergrund ist.</p>
       <p class="abschnitt">Arbeitszeit</p>
       <div class="feld-reihe">

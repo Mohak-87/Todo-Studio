@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Todo Studio · Jarvis</title>
+  <title>Todo Studio · MO</title>
   <meta name="theme-color" content="#06050d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Jarvis">
+  <meta name="apple-mobile-web-app-title" content="MO">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-180.png">
@@ -22,12 +22,12 @@
 </head>
 <body>
   <div class="weltraum" aria-hidden="true"></div>
-  <canvas id="wolke" aria-label="Jarvis und seine Agenten als Weltraumwolke. Mausrad oder zwei Finger zum Zoomen, Partikel antippen für Details."></canvas>
+  <canvas id="wolke" aria-label="MO und seine Agenten als Weltraumwolke. Mausrad oder zwei Finger zum Zoomen, Partikel antippen für Details."></canvas>
 
   <header class="kopf glas">
     <div class="marke">
       <span class="marke-punkt" id="markePunkt"></span>
-      <div><h1>JARVIS</h1><p id="kopfDatum">Todo Studio</p></div>
+      <div><h1>MO</h1><p id="kopfDatum">Todo Studio</p></div>
     </div>
     <div class="kopf-rechts">
       <span class="pille" id="pilleGoogle" title="Google-Skript (Aufgaben, Termine, Mails)"><i></i><span class="lang">Google</span><span class="kurz">G</span></span>
@@ -48,12 +48,12 @@
     <main id="inhalt" aria-live="polite"></main>
   </section>
 
-  <section class="chat glas" id="chat" aria-label="Gespräch mit Jarvis">
+  <section class="chat glas" id="chat" aria-label="Gespräch mit MO">
     <div class="chat-kopf">
-      <h2>Jarvis</h2>
+      <h2>MO</h2>
       <div class="chat-kopf-rechts">
         <small id="chatStatus">bereit</small>
-        <button type="button" class="gespraech-knopf" id="knopfGespraech" aria-pressed="false" title="Freihändig sprechen: Jarvis hört nach jeder Antwort wieder zu">🎧 Gespräch</button>
+        <button type="button" class="gespraech-knopf" id="knopfGespraech" aria-pressed="false" title="Freihändig sprechen: MO hört nach jeder Antwort wieder zu">🎧 Gespräch</button>
         <button type="button" class="icon-knopf chat-zu" id="chatZu" aria-label="Chat einklappen" title="Einklappen">▾</button>
       </div>
     </div>
@@ -74,10 +74,10 @@
   </section>
 
   <!-- Handy: der Chat ist eingeklappt, damit die Wolke Platz hat; dieser Knopf klappt ihn auf -->
-  <button type="button" class="chat-knopf glas" id="chatKnopf" aria-controls="chat" aria-expanded="false" aria-label="Chat mit Jarvis öffnen"><span>✦</span><em class="zaehler" id="chatZaehler" hidden></em></button>
+  <button type="button" class="chat-knopf glas" id="chatKnopf" aria-controls="chat" aria-expanded="false" aria-label="Chat mit MO öffnen"><span>✦</span><em class="zaehler" id="chatZaehler" hidden></em></button>
 
   <nav class="dock glas" id="dock" aria-label="Bereiche">
-    <button data-ansicht="jarvis" class="aktiv"><span>✦</span>Jarvis</button>
+    <button data-ansicht="jarvis" class="aktiv"><span>✦</span>MO</button>
     <button data-ansicht="heute"><span>☀</span>Heute</button>
     <button data-ansicht="aufgaben"><span>✓</span>Aufgaben</button>
     <button data-ansicht="termine"><span>◷</span>Termine</button>

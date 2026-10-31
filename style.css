@@ -385,3 +385,7 @@ code.kanal { font: 13px ui-monospace, Consolas, monospace; background: rgba(255,
 .unter-agent { border: 1px solid var(--kante); background: rgba(255, 255, 255, .04); color: var(--text-2); border-radius: 999px; padding: 3px 10px; font-size: .74rem; }
 .unter-agent:hover { border-color: var(--kante-hell); color: var(--text); }
 .team-unter { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 4px 0 0 18px; font-size: .78rem; color: var(--text-2); }
+
+/* Briefkasten: offline gesendete Nachrichten */
+.briefkasten-hinweis { display: block; margin-bottom: 4px; font-size: .72rem; color: var(--text-3); }
+.nachricht.wartend { opacity: .75; border-style: dashed; }

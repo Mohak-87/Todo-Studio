@@ -1,5 +1,5 @@
 /* Todo Studio – Offline-Hülle: Die Oberfläche öffnet sich auch ohne Netz (Daten dann vom letzten Stand). */
-const VERSION = 'studio-v14-icons';
+const VERSION = 'studio-v18-briefkasten';
 const DATEIEN = ['./', 'index.html', 'style.css', 'studio.js', 'jarvis.js', 'wolke.js', 'planer.js', 'demo.js', 'demo-zentrale.js', 'demo-katalog.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-180.png'];
 
 self.addEventListener('install', (e) => {

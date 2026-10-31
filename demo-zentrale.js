@@ -1,4 +1,4 @@
-/* Demo-Zentrale: simuliert Jarvis, Sub-Agenten, Freigaben und eine Claude-Sitzung – rein im Browser, nichts verlässt das Gerät. */
+/* Demo-Zentrale: simuliert MO, Sub-Agenten, Freigaben und eine Claude-Sitzung – rein im Browser, nichts verlässt das Gerät. */
 'use strict';
 
 const DemoZentrale = (() => {
@@ -138,6 +138,10 @@ const DemoZentrale = (() => {
       await tippen('Sehr wohl. Ich schlage eine Claude-Code-Sitzung im Ordner „kunden-website“ vor: nur lesen, höchstens 15 Minuten, Ergebnis ist eine Liste defekter Links. Geändert wird nichts. Darf ich?');
       chat('jarvis', 'Sehr wohl. Ich schlage eine Claude-Code-Sitzung im Ordner „kunden-website“ vor: nur lesen, höchstens 15 Minuten, Ergebnis ist eine Liste defekter Links. Geändert wird nichts. Darf ich?',
         { sprechen: 'Ich schlage eine lesende Sitzung vor. Darf ich?', vorschlagId: v.id });
+    } else if (!/(\b(erstell|anleg|leg|trag|speicher|setz|plan|mach)\w*\b[^.?!]{0,40}\b(aufgabe|todo|to-do|termin|idee|notiz|erinnerung|kalender|liste)\b|\b(aufgabe|todo|to-do|termin|idee|notiz|erinnerung)\w*\b[^.?!]{0,30}\b(erstell|anleg|eintrag|notier|aufschreib|speicher|festhalt|anlegen|eintragen)\w*|\b(notier\w*|schreib\w*\s+(\w+\s+){0,3}auf|merk\w*\s+(dir|mir)|halt\w*\s+(\w+\s+)?fest|vergiss\s+nicht)\b|\berinner\w*\s+(mich|mir)\b|^(aufgabe|todo|to-do|termin|idee|notiz|erinnerung)\s*:)/i.test(text)) {
+      const antwort = 'Gern. In der Demo kann ich nur so tun, als ob – mit Ihrer Zentrale antworte ich hier ganz normal auf Fragen und Gedanken. Eintragen tue ich nur, wenn Sie es sagen, etwa „Erstelle eine Aufgabe: Steuerberater anrufen“.';
+      await tippen(antwort);
+      chat('jarvis', antwort, { sprechen: 'Gern.' });
     } else {
       agent('aufgaben', 'arbeitet', 'Aufgabe anlegen');
       await DemoStudio.aufruf('schnell', { text: text.replace(/^notiere:?\s*/i, ''), typ: 'aufgabe' }).catch(() => {});

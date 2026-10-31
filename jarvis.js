@@ -1,4 +1,4 @@
-/* Todo Studio – Jarvis: Gespräch, Zentrale auf dem Laptop, Freigaben, Claude-Sitzungen, Sprache */
+/* Todo Studio – MO: Gespräch, Zentrale auf dem Laptop, Freigaben, Claude-Sitzungen, Sprache */
 'use strict';
 
 const Jarvis = (() => {
@@ -52,8 +52,8 @@ const Jarvis = (() => {
     const bereit = zentraleBereit();
     Studio.pille('#pilleZentrale', j.verbunden ? 'an' : (bereit ? 'aus' : ''),
       j.verbunden ? 'Zentrale verbunden' : bereit ? 'Zentrale nicht erreichbar' : 'Zentrale nicht eingerichtet');
-    $('#typWahl').hidden = !!j.verbunden;
-    eingabe.placeholder = j.verbunden ? 'Womit kann ich dienen?' : 'Notiz an Google (Zentrale offline) …';
+    $('#typWahl').hidden = true; // Art wird aus dem Satz erkannt („Erstelle eine Aufgabe …“, „Merke dir die Idee …“)
+    eingabe.placeholder = j.verbunden ? 'Womit kann ich dienen?' : 'Zentrale offline – Nachricht geht in den Briefkasten …';
     if (!j.verbunden) statusSetzen(bereit ? 'Zentrale offline' : 'nur Todos');
   }
 
@@ -105,7 +105,7 @@ const Jarvis = (() => {
         j.letzteNr = r.letzteNr;
         let auffrischen = false;
         for (const e of r.ereignisse) {
-          if (e.art === 'teil') { j.teil = e.text; chatZeichnen(); continue; } // Jarvis schreibt gerade
+          if (e.art === 'teil') { j.teil = e.text; chatZeichnen(); continue; } // MO schreibt gerade
           if (e.art === 'fachagent') {
             if (j.zustand) { j.zustand.aktiveAgenten = Object.assign({}, j.zustand.aktiveAgenten, { [e.agent]: e.status }); }
             if (window.Wolke && Wolke.setzeAktive) Wolke.setzeAktive(j.zustand ? j.zustand.aktiveAgenten : {});
@@ -144,6 +144,19 @@ const Jarvis = (() => {
     if (m.von === 'jarvis' && window.innerWidth <= 860 && !document.body.classList.contains('chat-offen')) { j.ungelesen = (j.ungelesen || 0) + 1; ungelesenZeigen(); }
     else if (m.von === 'nutzer') eingabe.value = '';
     chatZeichnen();
+  }
+
+  // ---------- Briefkasten: offline gesendete Nachrichten, bis die Zentrale sie übernommen hat ----------
+  const BK = 'studio.briefkasten';
+  function briefkasten() { try { return JSON.parse(localStorage.getItem(BK) || '[]'); } catch { return []; } }
+  function briefkastenSpeichern(l) { try { localStorage.setItem(BK, JSON.stringify(l.slice(-50))); } catch { /* egal */ } }
+  function briefkastenMerken(e) { briefkastenSpeichern(briefkasten().concat([e])); chatZeichnen(); }
+  /** Nachrichten, die die Zentrale schon übernommen hat (nachgereicht im Chat), aus dem Briefkasten nehmen. */
+  function briefkastenAbgleichen() {
+    if (!j.zustand) return;
+    const angekommen = new Set(j.zustand.chat.filter((m) => m.von === 'nutzer' && m.nachgereicht).map((m) => m.text.trim()));
+    const rest = briefkasten().filter((e) => !angekommen.has(String(e.text).trim()));
+    if (rest.length !== briefkasten().length) briefkastenSpeichern(rest);
   }
 
   /** Ungelesene Antworten am Chat-Knopf (Handy, Chat eingeklappt) */
@@ -199,12 +212,16 @@ const Jarvis = (() => {
 
   function chatZeichnen() {
     const server = (j.zustand && j.zustand.chat) || [];
-    const alle = server.concat(j.lokal).sort((a, b) => a.zeit.localeCompare(b.zeit)).slice(-80);
+    briefkastenAbgleichen();
+    const wartend = briefkasten().map((e) => ({ id: 'bk' + e.id, von: 'nutzer', text: e.text, zeit: e.zeit, imBriefkasten: true }));
+    const alle = server.concat(j.lokal, wartend).sort((a, b) => a.zeit.localeCompare(b.zeit)).slice(-80);
     const unten = verlaufEl.scrollHeight - verlaufEl.scrollTop - verlaufEl.clientHeight < 80;
     let h = '';
     for (const m of alle) {
       const zeit = new Date(m.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-      h += `<div class="nachricht ${m.von}">${esc(m.text)}${m.prompt ? `<div class="prompt-block"><div class="prompt-kopf"><span>Prompt</span><button class="knopf klein" data-j="prompt-kopieren" data-id="${esc(m.id)}">Kopieren</button></div><pre>${esc(m.prompt)}</pre></div>` : ''}<span class="zeit">${zeit}</span></div>`;
+      const hinweis = m.imBriefkasten ? '<span class="briefkasten-hinweis">⏳ im Briefkasten – MO bearbeitet das, sobald die Zentrale läuft</span>'
+        : m.nachgereicht ? `<span class="briefkasten-hinweis">✉ unterwegs geschrieben um ${esc(new Date(m.nachgereicht).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))}</span>` : '';
+      h += `<div class="nachricht ${m.von}${m.imBriefkasten ? ' wartend' : ''}">${hinweis}${esc(m.text)}${m.prompt ? `<div class="prompt-block"><div class="prompt-kopf"><span>Prompt</span><button class="knopf klein" data-j="prompt-kopieren" data-id="${esc(m.id)}">Kopieren</button></div><pre>${esc(m.prompt)}</pre></div>` : ''}<span class="zeit">${zeit}</span></div>`;
       if (m.vorschlagId) h += vorschlagHtml(vorschlag(m.vorschlagId));
     }
     if (j.teil) h += `<div class="nachricht jarvis live">${esc(j.teil)}<span class="cursor"></span></div>`;
@@ -268,7 +285,7 @@ const Jarvis = (() => {
     if (offen.length) h += '<p class="gruppe-titel">Warten auf Ihre Freigabe</p>' + offen.map(vorschlagHtml).join('<div style="height:8px"></div>');
     const auftraege = (z.auftraege || []).slice().reverse();
     h += '<p class="gruppe-titel">Aufträge an Fach-Agenten</p>';
-    if (!auftraege.length) h += '<p class="leise">Noch keine. Sagen Sie Jarvis etwa: „Plane die Werbung für das nächste PLUGGED-Event.“</p>';
+    if (!auftraege.length) h += '<p class="leise">Noch keine. Sagen Sie MO etwa: „Plane die Werbung für das nächste PLUGGED-Event.“</p>';
     else h += '<ul class="liste">' + auftraege.map((a) => {
       const [txt, kl] = SITZUNG_STATUS[a.status] || [a.status, ''];
       return `<li style="flex-direction:column;gap:6px">
@@ -335,18 +352,18 @@ const Jarvis = (() => {
       </li>`).join('') + '</ul>';
       h += '</div>';
     }
-    return `<p class="leise">${gesamt} Fach-Agenten in ${j.katalog.bereiche.length} Bereichen${(j.katalog.ablaeufe || []).length ? `, ${j.katalog.ablaeufe.length} feste Abläufe` : ''}. Spezialisten planen mit ihren Unteragenten. Neue erschafft Jarvis auf Zuruf („Erstelle mir einen Agenten für …“).</p>` + (h || '<p class="leer">Kein Agent gefunden – Jarvis kann ihn für Sie anlegen.</p>');
+    return `<p class="leise">${gesamt} Fach-Agenten in ${j.katalog.bereiche.length} Bereichen${(j.katalog.ablaeufe || []).length ? `, ${j.katalog.ablaeufe.length} feste Abläufe` : ''}. Spezialisten planen mit ihren Unteragenten. Neue erschafft MO auf Zuruf („Erstelle mir einen Agenten für …“).</p>` + (h || '<p class="leer">Kein Agent gefunden – MO kann ihn für Sie anlegen.</p>');
   }
 
   function meldungenHtml(z) {
     const n = z.ntfy || {};
     return `<div class="karte">
       <h3>Push-Meldungen aufs Handy (ntfy)</h3>
-      <p class="leise">Wenn das Studio geschlossen ist, meldet sich Jarvis kurz und neutral: „Eine Freigabe wartet“, „Ergebnisse sind fertig“, „Ein Termin beginnt in Kürze“ – ohne Inhalte.</p>
+      <p class="leise">Wenn das Studio geschlossen ist, meldet sich MO kurz und neutral: „Eine Freigabe wartet“, „Ergebnisse sind fertig“, „Ein Termin beginnt in Kürze“ – ohne Inhalte.</p>
       <ol class="schritte-liste">
         <li>App <b>ntfy</b> installieren (Android: Play Store, iPhone/iPad: App Store). Kostenlos, kein Konto nötig.</li>
         <li>In der App auf <b>＋</b> tippen und diesen Kanal abonnieren:<br><code class="kanal">${esc(n.kanal || '…')}</code> <button class="knopf klein" data-j="kanal-kopieren">Kopieren</button></li>
-        <li>Hier einschalten – Jarvis schickt sofort eine Testmeldung.</li>
+        <li>Hier einschalten – MO schickt sofort eine Testmeldung.</li>
       </ol>
       <div class="knopf-reihe">${n.an
         ? '<span class="chip ok">eingeschaltet</span><button class="knopf klein" data-j="ntfy" data-id="aus">Ausschalten</button>'
@@ -489,7 +506,7 @@ const Jarvis = (() => {
     if (j.verbunden) {
       // Freigabe per Wort nur, wenn genau ein Vorschlag offen ist – sonst bitte die Karte nutzen
       const offen = j.zustand ? j.zustand.vorschlaege.filter((v) => v.status === 'offen') : [];
-      // „Ja“ gilt nur als Freigabe, wenn Jarvis' letzte Nachricht genau diesen Vorschlag vorgelegt hat – sonst antwortet es auf einen Impuls
+      // „Ja“ gilt nur als Freigabe, wenn MOs letzte Nachricht genau diesen Vorschlag vorgelegt hat – sonst antwortet es auf einen Impuls
       const letzte = j.zustand ? j.zustand.chat.filter((m) => m.von === 'jarvis').slice(-1)[0] : null;
       const zurKarte = letzte && letzte.vorschlagId && offen.some((v) => v.id === letzte.vorschlagId);
       if ((JA.test(text) || NEIN.test(text)) && offen.length && zurKarte) {
@@ -506,11 +523,31 @@ const Jarvis = (() => {
       }
       return;
     }
-    // Zentrale aus: direkt als Notiz ans Google-Skript
+    // Zentrale aus: Ausdrückliche Notizen gehen sofort ans Google-Skript.
+    // Alles andere (Fragen, Aufträge, Prompts …) wartet im Google-Briefkasten, bis die Zentrale es abholt.
+    if (!ABSICHT.test(text)) {
+      if (!Studio.cfg.url || Studio.cfg.url === 'demo') {
+        lokal('nutzer', text);
+        lokal('jarvis', 'Die Zentrale ist nicht erreichbar, und ohne Google-Verbindung kann ich Ihre Nachricht auch nicht für später ablegen. Notieren kann ich trotzdem, sobald Google eingerichtet ist.', true);
+        return;
+      }
+      try {
+        const r = await Studio.api('claude.nachricht', { text });
+        briefkastenMerken({ id: r.id, text, zeit: r.zeit || new Date().toISOString() });
+        lokal('jarvis', 'Die Zentrale ist gerade nicht erreichbar. Ihre Nachricht liegt im Briefkasten – sobald Ihr Laptop wieder läuft, kümmere ich mich darum. Die Antwort erscheint dann hier.', true);
+      } catch (err) {
+        lokal('nutzer', text);
+        lokal('jarvis', /Unbekannte Aktion/i.test(err.message)
+          ? 'Der Briefkasten fehlt noch im Google-Skript – bitte das Skript aktualisieren (siehe Anleitung). Bis dahin kann ich Ihre Nachricht nicht für später ablegen.'
+          : 'Weder die Zentrale noch der Briefkasten sind gerade erreichbar (' + err.message + '). Bitte versuchen Sie es gleich noch einmal.', true);
+      }
+      return;
+    }
     lokal('nutzer', text);
     if (!Studio.cfg.url) { lokal('jarvis', 'Weder Zentrale noch Google sind eingerichtet. Ein Blick in die Einstellungen (⚙) würde helfen.', true); return; }
     try {
-      const r = await Studio.schnellNotieren(text, j.typ);
+      const typ = /\bidee\b/i.test(text) ? 'idee' : /\b(termin|kalender)\b/i.test(text) ? 'termin' : 'aufgabe';
+      const r = await Studio.schnellNotieren(befehlEntfernen(text), typ);
       lokal('jarvis', r + (zentraleBereit() ? ' (Die Zentrale ist offline – Claude-Aufgaben warten, bis sie wieder erreichbar ist.)' : ''), true);
     } catch (err) { lokal('jarvis', 'Das Notieren ist fehlgeschlagen: ' + err.message, true); }
   }
@@ -549,7 +586,7 @@ const Jarvis = (() => {
   }
   document.addEventListener('pointerdown', stimmeFreischalten, { once: true });
 
-  // Sprachausgabe. Danach hört Jarvis im Gesprächs-/Rufwort-Modus von selbst wieder zu.
+  // Sprachausgabe. Danach hört MO im Gesprächs-/Rufwort-Modus von selbst wieder zu.
   let sprichtGerade = false, sprechTimer = null;
   function sprechen(text) {
     if (!text || !Studio.cfg.stimme || !TTS) { gesprochen(); return; }
@@ -586,11 +623,28 @@ const Jarvis = (() => {
   });
   stimmeKnopf();
 
-  // ---------- Zuhören: einmal · Gespräch · Rufwort „Jarvis“ ----------
-  // modus: 'aus' | 'einmal' (ein Satz) | 'gespraech' (freihändig im Wechsel) | 'wach' (wartet auf „Jarvis …“)
+  // ---------- Zuhören: einmal · Gespräch · Rufwort „Hey MO“ ----------
+  // modus: 'aus' | 'einmal' (ein Satz) | 'gespraech' (freihändig im Wechsel) | 'wach' (wartet auf „MO …“)
   const h = { modus: 'aus', sr: null, stille: 0, wartet: false, wartetTimer: null, befehl: false, ausloesen: null };
+  // Ausdrücklicher Wunsch, etwas einzutragen (sonst wird nur geredet)
+  const ABSICHT = /(\b(erstell|anleg|leg|trag|speicher|setz|plan|mach)\w*\b[^.?!]{0,40}\b(aufgabe|todo|to-do|termin|idee|notiz|erinnerung|kalender|liste)\b|\b(aufgabe|todo|to-do|termin|idee|notiz|erinnerung)\w*\b[^.?!]{0,30}\b(erstell|anleg|eintrag|notier|aufschreib|speicher|festhalt|anlegen|eintragen)\w*|\b(notier\w*|schreib\w*\s+(\w+\s+){0,3}auf|merk\w*\s+(dir|mir)|halt\w*\s+(\w+\s+)?fest|vergiss\s+nicht)\b|\berinner\w*\s+(mich|mir)\b|^(aufgabe|todo|to-do|termin|idee|notiz|erinnerung)\s*:)/i;
+  /** „Erstelle eine Aufgabe: Brot kaufen“ → „Brot kaufen“ (Datum/Uhrzeit bleiben für die Erkennung erhalten) */
+  function befehlEntfernen(t) {
+    // „… Aufgabe erstellen: X“ / „Merke dir die Idee: X“ → X
+    const doppel = /^.{0,70}?\b(aufgabe|todo|to-do|termin|idee|notiz|erinnerung)\b([^:]{0,30}):\s*(.+)$/i.exec(String(t).trim());
+    if (doppel) {
+      // Zeitangaben vor dem Doppelpunkt („für Freitag“, „morgen um 10“) behalten, Befehlswörter weglassen
+      const zeit = doppel[2].replace(/\b(erstell|anleg|eintrag|notier|aufschreib|speicher|festhalt|bitte|an|ein|auf)\w*\b/gi, '').replace(/\s+/g, ' ').trim();
+      return (doppel[3].trim() + (zeit ? ' ' + zeit : '')).trim();
+    }
+    const r = String(t).replace(/^\s*(bitte\s+)?(kannst du\s+(mir\s+)?)?(erstell\w*|leg\w*|trag\w*|notier\w*|schreib\w*|merk\w*|halt\w*|speicher\w*|setz\w*|plan\w*)\s+(mir|dir)?\s*(bitte\s+)?(eine?[nrs]?\s+)?(neue[nrs]?\s+)?(aufgabe|todo|to-do|termin|idee|notiz|erinnerung)?\s*(an|ein|auf|fest)?\s*(dass|:|,|-|–)?\s*/i, '')
+      .replace(/^\s*(aufgabe|todo|to-do|termin|idee|notiz|erinnerung)\s*:\s*/i, '')
+      .replace(/^\s*erinner\w*\s+(mich|mir)\s*(bitte\s+)?(daran,?\s*)?(dass\s+)?/i, '').replace(/^\s*dass\s+/i, '').trim();
+    return r || String(t).trim();
+  }
   const ENDE = /^(ende|stopp|stop|schluss|das wars?|das war's|danke,? das war'?s|gespräch beenden|tschüss|auf wiedersehen)[.!]?$/i;
-  const RUF = /\bjarvis\b[,.!?:]?\s*(.*)$/i;
+  // Rufwort „Hey MO“ – die Spracherkennung schreibt es unterschiedlich (Mo, Moh, Moe, M. O., …)
+  const RUF = /\b(?:hey|hi|hei|ey|hallo|okay|ok)[,\s]+(?:mo|moh|moe|mow|moo|mö|m\.?\s?o\.?)(?![a-zäöü])[,.!?:]?\s*(.*)$/i;
   let hinweisKeineSprache = false;
 
   function grundModus() { return Studio.cfg.aufJarvisHoeren && SR ? 'wach' : 'aus'; }
@@ -609,7 +663,7 @@ const Jarvis = (() => {
     $('#knopfGespraech').setAttribute('aria-pressed', String(h.modus === 'gespraech'));
     if (window.Wolke) Wolke.setzeHoert(hoert && (h.modus !== 'wach' || h.befehl));
     if (h.modus === 'gespraech') statusSetzen(hoert ? 'hört zu …' : h.wartet ? 'denkt …' : 'Gespräch');
-    else if (h.modus === 'wach') statusSetzen(h.befehl ? 'Ja, bitte?' : 'wartet auf „Jarvis“');
+    else if (h.modus === 'wach') statusSetzen(h.befehl ? 'Ja, bitte?' : 'wartet auf „MO“');
     else if (h.modus === 'einmal') statusSetzen('hört zu …');
   }
 
@@ -636,7 +690,7 @@ const Jarvis = (() => {
     senden(text);
   }
 
-  /** Nach jeder Äußerung von Jarvis: weiter zuhören, wenn ein freihändiger Modus aktiv ist. */
+  /** Nach jeder Äußerung von MO: weiter zuhören, wenn ein freihändiger Modus aktiv ist. */
   function gesprochen() {
     h.wartet = false;
     clearTimeout(h.wartetTimer);
@@ -690,7 +744,7 @@ const Jarvis = (() => {
           lokal('nutzer', text);
           const zurueck = grundModus();
           modusSetzen(zurueck);
-          sprechen(zurueck === 'wach' ? 'Sehr wohl. Rufen Sie einfach Jarvis, wenn Sie mich brauchen.' : 'Sehr wohl. Ich bin da, wenn Sie mich brauchen.');
+          sprechen(zurueck === 'wach' ? 'Sehr wohl. Sagen Sie einfach „Hey MO“, wenn Sie mich brauchen.' : 'Sehr wohl. Ich bin da, wenn Sie mich brauchen.');
           return;
         }
         h.befehl = false;
@@ -704,7 +758,7 @@ const Jarvis = (() => {
       if (h.stille >= 4) {
         const zurueck = grundModus();
         modusSetzen(zurueck);
-        lokal('jarvis', zurueck === 'wach' ? 'Es ist still geworden – ich warte, bis Sie „Jarvis“ sagen.' : 'Es ist still geworden. Ich beende das Gespräch; tippen Sie auf 🎧, um fortzusetzen.');
+        lokal('jarvis', zurueck === 'wach' ? 'Es ist still geworden – ich warte, bis Sie „Hey MO“ sagen.' : 'Es ist still geworden. Ich beende das Gespräch; tippen Sie auf 🎧, um fortzusetzen.');
         return;
       }
       setTimeout(hoerenStarten, 250);
@@ -757,7 +811,7 @@ const Jarvis = (() => {
         <dt>Liefert</dt><dd>${esc(agent.liefert || '')}</dd>
         <dt>Rechte</dt><dd>${agent.rechte === 'web' ? 'Text + Websuche (nur lesen, mit Quellen)' : 'Nur Text – arbeitet mit Ihrem Auftrag und dem gemeinsamen Wissen'}</dd>
         <dt>Darf nie</dt><dd>veröffentlichen, senden, kaufen, löschen – liefert nur Entwürfe</dd>
-        <dt>Start</dt><dd>nur nach Ihrer Freigabe, über Jarvis</dd>
+        <dt>Start</dt><dd>nur nach Ihrer Freigabe, über MO</dd>
       </dl><div class="knopf-reihe"><button class="knopf klein haupt-knopf" data-j="agent-beauftragen" data-id="${esc(agent.unteragent ? agent.elternId : agent.id)}">${agent.unteragent ? 'Spezialist beauftragen …' : 'Beauftragen …'}</button></div>` : ''}
       ${s ? `<div class="zeilen">${esc(s.letzteZeilen.join('\n'))}</div><div class="knopf-reihe"><button class="knopf klein" data-j="details" data-id="${esc(s.id)}">Protokoll</button>${stoppbar(s) ? `<button class="knopf klein gefahr" data-j="stoppen" data-id="${esc(s.id)}">${s.art === 'bau' ? 'Abbrechen' : 'Stoppen'}</button>` : ''}</div>` : ''}
       <div class="knopf-reihe" style="margin-top:10px"><button class="knopf klein" id="agentKarteZu">Schließen</button></div>`;
@@ -780,7 +834,7 @@ const Jarvis = (() => {
   $('#chatKnopf').addEventListener('click', () => { stimmeFreischalten(); chatUmschalten(true); });
   $('#chatZu').addEventListener('click', () => chatUmschalten(false));
   $('.chat-kopf').addEventListener('click', (ev) => { if (!ev.target.closest('button') && mobil()) chatUmschalten(false); });
-  // Dock „Jarvis“: Schublade schließen und Chat öffnen bzw. (ohne Schublade) ein-/ausklappen
+  // Dock „MO“: Schublade schließen und Chat öffnen bzw. (ohne Schublade) ein-/ausklappen
   $('#dock [data-ansicht="jarvis"]').addEventListener('click', () => {
     if (!mobil()) return;
     chatUmschalten($('#schublade').hidden ? undefined : true);
@@ -797,4 +851,4 @@ const Jarvis = (() => {
     agentKarte, sprechen, agentZuKarte
   };
 })();
-window.Jarvis = Jarvis;
+window.Jarvis = MO;
