@@ -587,5 +587,17 @@ window.Studio = Studio;
 Studio.zeichnen();
 if (Studio.cfg.url) Studio.heuteLaden(); else Studio.einstellungenDialog(true);
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('sw.js').catch(() => { /* ohne Offline-Hülle weiter */ });
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    // Neue Version auf GitHub? Beim Zurückkehren und alle 10 Minuten nachsehen – offene Fenster bleiben sonst auf altem Stand
+    const pruefen = () => reg.update().catch(() => { /* offline */ });
+    setInterval(pruefen, 10 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pruefen(); });
+  }).catch(() => { /* ohne Offline-Hülle weiter */ });
+  let hatteVersion = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hatteVersion) { hatteVersion = true; return; } // allererste Installation: nichts neu laden
+    const neuLaden = () => { if (!document.getElementById('eingabeText').value.trim()) location.reload(); };
+    if (document.hidden) document.addEventListener('visibilitychange', neuLaden, { once: true });
+    else { Studio.toast('Neue Version des Studios – wird geladen …', 2000); setTimeout(neuLaden, 1500); }
+  });
 }

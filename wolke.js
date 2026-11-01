@@ -608,6 +608,20 @@ try {
   composer.addPass(new OutputPass());
   let mitBloom = true;
 
+  /** Mitte des freien Bereichs zwischen den Seitenanzeigen links und dem Chat rechts. */
+  function freieMitte(w) {
+    const chat = document.getElementById('chat');
+    const rechts = chat ? chat.getBoundingClientRect().left : w - Math.min(420, w - 32) - 16;
+    let links = 0;
+    for (const el of document.querySelectorAll('.hud')) {
+      const s = getComputedStyle(el);
+      if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') continue;
+      const r = el.getBoundingClientRect();
+      if (r.left < w / 2) links = Math.max(links, r.left + r.width);
+    }
+    return (links + rechts) / 2;
+  }
+
   function groesseAnpassen() {
     const w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h, false);
@@ -616,12 +630,12 @@ try {
     bloom.resolution.set(w * (schwach ? 0.35 : 0.5), h * (schwach ? 0.35 : 0.5));
     camera.aspect = w / h;
     const chatOffen = document.body.classList.contains('chat-offen');
-    if (w > 860) camera.setViewOffset(w, h, chatOffen ? (Math.min(420, w - 32) + 16) / 2 : 0, 0, w, h);
+    if (w > 860) camera.setViewOffset(w, h, chatOffen ? w / 2 - freieMitte(w) : 0, 0, w, h);
     else camera.setViewOffset(w, h, 0, document.body.classList.contains('chat-offen') ? Math.round(h * 0.2) : Math.round(h * 0.03), w, h);
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', groesseAnpassen);
-  window.addEventListener('studio-layout', groesseAnpassen);
+  window.addEventListener('studio-layout', () => { groesseAnpassen(); setTimeout(groesseAnpassen, 320); }); // nach dem Ein-/Ausklappen nachmessen
   groesseAnpassen();
 
   // ---------- Auswahl ----------

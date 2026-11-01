@@ -162,6 +162,7 @@
     sichtbar = !sichtbar;
     try { localStorage.setItem(AN, sichtbar ? 'an' : 'aus'); } catch (e) { /* egal */ }
     zeichnen();
+    window.dispatchEvent(new Event('studio-layout')); // Wolke neu mittig setzen
   });
 
   document.addEventListener('studio:daten', zeichnen);

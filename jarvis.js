@@ -142,7 +142,10 @@ const Jarvis = (() => {
     if (m.von === 'jarvis') { j.teil = null; if (j.zustand && j.zustand.jarvis) j.zustand.jarvis.status = 'bereit'; }
     if (j.zustand) j.zustand.chat.push(m);
     // Spricht MO über Orte (Nachrichten, Länder, Städte), erscheint die Erdkugel – nur bei frischen Nachrichten
-    if (m.von === 'jarvis' && Array.isArray(m.orte) && m.orte.length && window.Wolke && Wolke.globus && Date.now() - Date.parse(m.zeit || 0) < 120000) Wolke.globus(m.orte);
+    if (m.von === 'jarvis' && Array.isArray(m.orte) && m.orte.length && window.Wolke && Wolke.globus && Date.now() - Date.parse(m.zeit || 0) < 120000) {
+      Wolke.globus(m.orte);
+      if (innerWidth <= 860) chatUmschalten(false); // Handy: die Kugel braucht den Platz, die Antwort bleibt im Chat
+    }
     if (m.von === 'jarvis') sprechen(m.sprechen || (m.text.length < 160 ? m.text : ''));
     if (m.von === 'jarvis' && !document.body.classList.contains('chat-offen')) { j.ungelesen = (j.ungelesen || 0) + 1; ungelesenZeigen(); }
     else if (m.von === 'nutzer') eingabe.value = '';
@@ -190,6 +193,9 @@ const Jarvis = (() => {
     if (s.typ === 'sitzung') {
       return `<li><b>${esc(s.titel)}</b> – ${esc(s.ziel)}<br><span class="leise">Ordner ${esc(s.ordner)} · ${s.rechte === 'lesen' ? 'nur lesen' : 'Dateien bearbeiten (Befehle nur aus fester Liste, kein Push)'} · höchstens ${s.hoechstMin} Min.</span></li>`;
     }
+    if (s.schluessel === 'mails.entwurf' && s.daten) {
+      return `<li><b>Mail-Entwurf speichern – wird nicht versendet</b><br><span class="leise">An:</span> ${esc(s.daten.an)}<br><span class="leise">Betreff:</span> ${esc(s.daten.betreff || '(ohne Betreff)')}${s.daten.antwortAufId ? ' <span class="leise">(Antwort im selben Verlauf)</span>' : ''}<p class="text-block">${esc(s.daten.text)}</p></li>`;
+    }
     return `<li><b>${esc(s.beschreibung)}</b></li>`;
   }
 
@@ -224,7 +230,7 @@ const Jarvis = (() => {
       const zeit = new Date(m.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
       const hinweis = m.imBriefkasten ? '<span class="briefkasten-hinweis">⏳ im Briefkasten – MO bearbeitet das, sobald die Zentrale läuft</span>'
         : m.nachgereicht ? `<span class="briefkasten-hinweis">✉ unterwegs geschrieben um ${esc(new Date(m.nachgereicht).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))}</span>` : '';
-      h += `<div class="nachricht ${m.von}${m.imBriefkasten ? ' wartend' : ''}">${hinweis}${esc(m.text)}${m.prompt ? `<div class="prompt-block"><div class="prompt-kopf"><span>Prompt</span><button class="knopf klein" data-j="prompt-kopieren" data-id="${esc(m.id)}">Kopieren</button></div><pre>${esc(m.prompt)}</pre></div>` : ''}<span class="zeit">${zeit}</span></div>`;
+      h += `<div class="nachricht ${m.von}${m.imBriefkasten ? ' wartend' : ''}">${hinweis}${esc(m.text)}${m.prompt ? `<div class="prompt-block"><div class="prompt-kopf"><span>Prompt</span><button class="knopf klein" data-j="prompt-kopieren" data-id="${esc(m.id)}">Kopieren</button></div><pre>${esc(m.prompt)}</pre></div>` : ''}${Array.isArray(m.orte) && m.orte.length ? `<button class="knopf klein erde-knopf" data-j="erde-zeigen" data-id="${esc(m.id)}">🌍 Auf der Erde zeigen</button>` : ''}<span class="zeit">${zeit}</span></div>`;
       if (m.vorschlagId) h += vorschlagHtml(vorschlag(m.vorschlagId));
     }
     if (j.teil) h += `<div class="nachricht jarvis live">${esc(j.teil)}<span class="cursor"></span></div>`;
@@ -502,6 +508,10 @@ const Jarvis = (() => {
     if (was === 'prompt-kopieren') {
       const m = ((j.zustand && j.zustand.chat) || []).find((x) => x.id === id);
       if (m && m.prompt) navigator.clipboard.writeText(m.prompt).then(() => toast('Prompt kopiert.'), () => toast('Kopieren nicht möglich – bitte markieren.'));
+    }
+    if (was === 'erde-zeigen') {
+      const m = ((j.zustand && j.zustand.chat) || []).find((x) => x.id === id);
+      if (m && m.orte && window.Wolke && Wolke.globus) { Wolke.globus(m.orte); if (innerWidth <= 860) chatUmschalten(false); }
     }
     if (was === 'reiter') { arbeit.reiter = id; if (id === 'bibliothek') arbeit.bib = null; Studio.zeichnen(); }
     if (was === 'bereich') { arbeit.offen.has(id) ? arbeit.offen.delete(id) : arbeit.offen.add(id); listeErneuern(); }

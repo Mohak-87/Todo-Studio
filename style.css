@@ -442,11 +442,16 @@ body.chat-offen .chat-knopf { opacity: 0; transform: scale(.7); pointer-events: 
 .hud-kennzahlen .warn b { color: var(--warn); }
 /* Platz machen: Schublade (links) und Chat (rechts) haben Vorrang */
 body:has(#schublade:not([hidden])) .hud-links { opacity: 0; transform: translateX(-20px); visibility: hidden; }
-body.chat-offen .hud-rechts { opacity: 0; transform: translateX(20px); visibility: hidden; }
+/* Chat offen: Team und System wandern als zweite Spalte nach links, statt hinter dem Chat zu verschwinden */
+body.chat-offen .hud-rechts { right: auto; left: calc(16px + 262px + 10px); animation: hudRein .25s ease-out; }
+@keyframes hudRein { from { opacity: 0; transform: translateX(-12px); } }
+body.chat-offen:has(#schublade:not([hidden])) .hud-rechts { opacity: 0; visibility: hidden; }
 body.hud-aus .hud, body.hud-aus .hud-leiste { display: none; }
 .hud-leiste { display: none; }
 @media (max-height: 640px) { .hud-panel:nth-child(3) { display: none; } }
-@media (min-width: 861px) and (max-width: 1180px) { .hud { width: 220px; } .hud-uhr { font-size: 1.7rem; } }
+@media (min-width: 861px) and (max-width: 1180px) { .hud { width: 220px; } .hud-uhr { font-size: 1.7rem; } body.chat-offen .hud-rechts { left: calc(16px + 220px + 10px); } }
+/* Zu schmal für zwei Spalten neben dem Chat: dann ausblenden wie bisher */
+@media (min-width: 861px) and (max-width: 1000px) { body.chat-offen .hud-rechts { opacity: 0; visibility: hidden; } }
 @media (max-width: 860px) {
   .hud { display: none; }
   .hud-leiste { display: flex; position: fixed; z-index: 7; left: 8px; right: 8px; top: calc(var(--kopf-h) + 18px + env(safe-area-inset-top));
@@ -480,3 +485,4 @@ body.globus-an .bereich-label, body.globus-an .agent-label { display: none; }
   .globus-karte { bottom: calc(var(--dock-h) + 96px + env(safe-area-inset-bottom)); }
   body.chat-offen .globus-karte { display: none; }
 }
+.erde-knopf { display: inline-flex; margin-top: 8px; }

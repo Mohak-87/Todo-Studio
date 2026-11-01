@@ -113,6 +113,18 @@ const DemoZentrale = (() => {
         { sprechen: 'Ihr Prompt liegt vor. Ampel Grün.', prompt });
       return;
     }
+    if (/welt|nachrichten|lagebericht|wo liegt/i.test(text)) {
+      // Demo der Erdkugel: Antwort mit Orten, die Kugel dreht sich beim Vorlesen zu jedem Ort
+      const orte = [
+        { name: 'Großbritannien', lat: 51.51, lon: -0.13, text: 'Umfassende Sozialreformen angekündigt' },
+        { name: 'Griechenland', lat: 37.98, lon: 23.73, text: 'Neue US-Botschafterin in Athen' },
+        { name: 'Spanien', lat: 40.42, lon: -3.70, text: 'Mietverträge sollen entfristet werden' }
+      ];
+      chat('jarvis', 'Lagebericht, Sir. Großbritannien kündigt umfassende Sozialreformen an. In Griechenland tritt eine neue US-Botschafterin ihr Amt an. Spanien will Mietverträge entfristen und Zwangsräumungen verbieten.\n\n(Demo-Nachrichten)',
+        { sprechen: 'Lagebericht, Sir. Großbritannien kündigt umfassende Sozialreformen an. In Griechenland tritt eine neue US-Botschafterin ihr Amt an. Spanien will Mietverträge entfristen.', orte });
+      agent('jarvis', 'bereit', '');
+      return;
+    }
     if (/kampagne|werbung|marketing|plane|event/i.test(text)) {
       const team = ['marketing.zielgruppe', 'branding.slogan', 'instagram.redaktionsplan'].map((id) => katalogAgent(id)).filter(Boolean);
       const v = {
