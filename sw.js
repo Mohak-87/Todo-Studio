@@ -1,6 +1,6 @@
 /* Todo Studio – Offline-Hülle: Die Oberfläche öffnet sich auch ohne Netz (Daten dann vom letzten Stand). */
-const VERSION = 'studio-v31-hud';
-const DATEIEN = ['./', 'index.html', 'style.css', 'studio.js', 'jarvis.js', 'hud.js', 'wolke.js', 'planer.js', 'demo.js', 'demo-zentrale.js', 'demo-katalog.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-180.png'];
+const VERSION = 'studio-v32-erde';
+const DATEIEN = ['./', 'index.html', 'style.css', 'studio.js', 'jarvis.js', 'hud.js', 'wolke.js', 'globus.js', 'erde-maske.png', 'planer.js', 'demo.js', 'demo-zentrale.js', 'demo-katalog.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-180.png'];
 
 self.addEventListener('install', (e) => {
   // Einzeln zwischenspeichern: fehlt eine Datei (z. B. ein Icon), scheitert nicht die ganze Offline-Hülle

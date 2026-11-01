@@ -230,7 +230,8 @@ try {
   const sternGeo = new THREE.BufferGeometry();
   sternGeo.setAttribute('position', new THREE.BufferAttribute(sternPos, 3));
   sternGeo.setAttribute('color', new THREE.BufferAttribute(sternFarbe, 3));
-  scene.add(new THREE.Points(sternGeo, new THREE.PointsMaterial({ size: 0.9, map: LEUCHT, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending })));
+  const sterne = new THREE.Points(sternGeo, new THREE.PointsMaterial({ size: 0.9, map: LEUCHT, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+  scene.add(sterne);
 
   // 5) Kern = MO
   const kern = new THREE.Sprite(new THREE.SpriteMaterial({ map: LEUCHT, color: new THREE.Color('#fff4ff'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -670,7 +671,7 @@ try {
     if (!start) return;
     const bewegt = Math.hypot(ev.clientX - start.x, ev.clientY - start.y);
     start = null;
-    if (bewegt > 8) return;
+    if (bewegt > 8 || (globus && globus.aktiv)) return;
     const obj = treffer(ev);
     if (!obj) { auswahlAufheben(); return; }
     ausgewaehlt = obj;
@@ -680,7 +681,7 @@ try {
     if (window.Jarvis) Jarvis.agentKarte(agent, ev.clientX, ev.clientY);
   });
   canvas.addEventListener('pointermove', (ev) => {
-    if (ev.pointerType !== 'mouse') return;
+    if (ev.pointerType !== 'mouse' || (globus && globus.aktiv)) return;
     ueber = treffer(ev);
     canvas.style.cursor = ueber ? 'pointer' : 'grab';
   });
@@ -689,6 +690,21 @@ try {
     const k = document.getElementById('agentKarte');
     if (k) k.hidden = true;
   }
+
+  // ---------- Erdkugel (wenn MO über Orte spricht) ----------
+  let globus = null;
+  try {
+    const { globusAnlegen } = await import('./globus.js');
+    const versteckt = [];
+    globus = globusAnlegen({
+      THREE, scene, camera, controls, LEUCHT, schwach, reduziert,
+      wolkeAusblenden(an) {
+        if (an) { for (const o of scene.children) if (o !== sterne && o.visible && !o.userData.globus) { o.visible = false; versteckt.push(o); } auswahlAufheben(); }
+        else { versteckt.forEach((o) => { o.visible = true; }); versteckt.length = 0; }
+      }
+    });
+    scene.children[scene.children.length - 1].userData.globus = true;
+  } catch (err) { console.warn('Erdkugel nicht verfügbar:', err); }
 
   // ---------- Animation ----------
   const uhr = new THREE.Clock();
@@ -746,9 +762,12 @@ try {
     haufenGruppe.updateMatrixWorld();
     synapsenAktualisieren(t);
     haufenBeschriften(abstand);
-    if (kameraZiel) { camera.position.lerp(kameraZiel, 0.05); if (camera.position.distanceTo(kameraZiel) < 0.3) kameraZiel = null; }
-    if (ausgewaehlt) { ausgewaehlt.getWorldPosition(ziel); controls.target.lerp(ziel, 0.06); controls.autoRotate = false; }
-    else { controls.target.lerp(ziel.set(0, 0, 0), 0.04); controls.autoRotate = !reduziert; }
+    if (globus && globus.aktiv) globus.schritt(t, kernStoss);
+    else {
+      if (kameraZiel) { camera.position.lerp(kameraZiel, 0.05); if (camera.position.distanceTo(kameraZiel) < 0.3) kameraZiel = null; }
+      if (ausgewaehlt) { ausgewaehlt.getWorldPosition(ziel); controls.target.lerp(ziel, 0.06); controls.autoRotate = false; }
+      else { controls.target.lerp(ziel.set(0, 0, 0), 0.04); controls.autoRotate = !reduziert; }
+    }
     controls.update();
     if (mitBloom) composer.render(); else renderer.render(scene, camera);
 
@@ -774,6 +793,10 @@ try {
   api = { setzeAgenten, setzeKatalog, setzeAktive, fokus, auswahlAufheben, setzeSpricht(b) { spricht = !!b; if (spricht) sprechImpuls(1); }, setzeHoert(b) { hoert = !!b; },
     /** Wortgrenze der Stimme → Impuls genau im Takt */
     sprichtImpuls() { letzteGrenze = uhr.getElapsedTime(); sprechImpuls(0.75 + Math.random() * 0.35); },
+    /** Erdkugel zeigen: orte = [{ name, lat, lon, text }]; leer = einfach die Erde (bleibt, bis man zurückkehrt). */
+    globus(orte) { if (globus) globus.zeigen(orte || [], { dauerhaft: !(orte && orte.length) }); },
+    globusZu() { if (globus) globus.verlassen(); },
+    get globusAktiv() { return !!(globus && globus.aktiv); },
     get synapsen() { return synapsen.size; }, get bereiche() { return haufen.size; }, get unteragenten() { return unter.size; } };
 } catch (err) {
   // Ohne WebGL: ruhige Ersatz-Darstellung, Agenten als antippbare Punkte im Kreis
@@ -799,7 +822,7 @@ try {
         knoepfe.push(k);
       });
     },
-    auswahlAufheben() {}, setzeSpricht() {}, setzeHoert() {}, setzeKatalog() {}, setzeAktive() {}, fokus() {}
+    auswahlAufheben() {}, setzeSpricht() {}, setzeHoert() {}, setzeKatalog() {}, setzeAktive() {}, fokus() {}, globus() {}, globusZu() {}
   };
 }
 

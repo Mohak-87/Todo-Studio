@@ -141,6 +141,8 @@ const Jarvis = (() => {
     j.gezeigt.add(m.id);
     if (m.von === 'jarvis') { j.teil = null; if (j.zustand && j.zustand.jarvis) j.zustand.jarvis.status = 'bereit'; }
     if (j.zustand) j.zustand.chat.push(m);
+    // Spricht MO über Orte (Nachrichten, Länder, Städte), erscheint die Erdkugel – nur bei frischen Nachrichten
+    if (m.von === 'jarvis' && Array.isArray(m.orte) && m.orte.length && window.Wolke && Wolke.globus && Date.now() - Date.parse(m.zeit || 0) < 120000) Wolke.globus(m.orte);
     if (m.von === 'jarvis') sprechen(m.sprechen || (m.text.length < 160 ? m.text : ''));
     if (m.von === 'jarvis' && !document.body.classList.contains('chat-offen')) { j.ungelesen = (j.ungelesen || 0) + 1; ungelesenZeigen(); }
     else if (m.von === 'nutzer') eingabe.value = '';
@@ -548,6 +550,11 @@ const Jarvis = (() => {
     if (!text) return;
     const ansicht = ansichtAufZuruf(text);
     if (ansicht) Studio.oeffne(ansicht);
+    // Erdkugel auf Zuruf („Zeig mir die Welt“) und zurück („Zurück zum Hauptmenü“)
+    if (window.Wolke && Wolke.globus) {
+      if (/(?:^|[\s,.!?„])(zeig|öffne)\w*\s[^.?!]{0,30}\b(welt|erde|erdkugel|globus|weltkarte|weltlage)\b/i.test(text)) Wolke.globus([]);
+      else if (/zurück (zum hauptmenü|zur wolke)|schließ\w* (die |den )?(erde|erdkugel|karte|weltkarte|globus)/i.test(text)) Wolke.globusZu();
+    }
     eingabe.value = '';
     eingabe.style.height = '46px';
     if (j.verbunden) {
@@ -726,6 +733,7 @@ const Jarvis = (() => {
       if (!urls[i]) throw fehler || new Error('Stimme fehlt');
       if (moAudio.src) URL.revokeObjectURL(moAudio.src);
       moAudio.src = urls[i];
+      window.dispatchEvent(new CustomEvent('mo:satz', { detail: stuecke[i] })); // Erdkugel dreht zum genannten Ort
       await moAudio.play();
       await new Promise((ok) => { moAudio.onended = ok; moAudio.onerror = ok; });
     }
@@ -778,7 +786,7 @@ const Jarvis = (() => {
         if (window.Wolke) Wolke.setzeSpricht(false);
         gesprochen();
       };
-      u.onstart = () => { if (window.Wolke) Wolke.setzeSpricht(true); };
+      u.onstart = () => { if (window.Wolke) Wolke.setzeSpricht(true); window.dispatchEvent(new CustomEvent('mo:satz', { detail: satz })); };
       u.onboundary = (ev) => { if (ev.name === 'word' && window.Wolke && Wolke.sprichtImpuls) Wolke.sprichtImpuls(); };
       u.onend = u.onerror = fertig;
       sprechTimer = setTimeout(fertig, 2500 + satz.length * 90); // Chrome meldet das Ende nicht immer
@@ -887,6 +895,7 @@ const Jarvis = (() => {
 
   /** Nach jeder Äußerung von MO: weiter zuhören, wenn ein freihändiger Modus aktiv ist. */
   function gesprochen() {
+    window.dispatchEvent(new CustomEvent('mo:fertig'));
     h.wartet = false;
     clearTimeout(h.wartetTimer);
     if (h.modus === 'gespraech' || h.modus === 'wach') setTimeout(hoerenStarten, 350);
