@@ -724,33 +724,27 @@ const Jarvis = (() => {
     return URL.createObjectURL(await res.blob());
   }
   /**
-   * Satz für Satz: Der erste Satz erklingt, während die Zentrale die nächsten schon rechnet.
+   * Erst der erste Satz, dann der Rest in großen Stücken – alle gleichzeitig bei der Zentrale angefragt.
    * Gibt ein Promise zurück, das nach dem letzten Satz erfüllt ist (oder beim ersten Fehler scheitert).
    */
   let sprechLauf = 0;
   async function sprechenZentrale(text) {
     const lauf = ++sprechLauf;
     const saetze = String(text).match(/[^.!?…]+[.!?…]*\s*/g)?.map((x) => x.trim()).filter(Boolean) || [String(text)];
-    // nur sehr kurze Sätze zusammenfassen
-    const stuecke = [];
-    for (const x of saetze) { if (stuecke.length > 1 && (stuecke[stuecke.length - 1] + ' ' + x).length < 45) stuecke[stuecke.length - 1] += ' ' + x; else stuecke.push(x); } // Satz für Satz: der nächste wird gerechnet, während der aktuelle läuft
-    const urls = stuecke.map(() => null);
-    let fertigGeholt = 0, fehler = null, weckeAuf = null;
-    (async () => {
-      for (let i = 0; i < stuecke.length && lauf === sprechLauf; i++) {
-        try { urls[i] = await stimmeHolen(stuecke[i]); } catch (e) { fehler = e; }
-        fertigGeholt = i + 1;
-        if (weckeAuf) weckeAuf();
-        if (fehler) break;
-      }
-    })();
-    const warteAuf = (i) => new Promise((ok) => { const p = () => (fertigGeholt > i || fehler ? ok() : (weckeAuf = p)); p(); });
+    // Erster Satz allein (MO spricht sofort los), der Rest in großen Stücken – so bleibt die Satzmelodie
+    // erhalten und es gibt kaum Pausen. Alle Stücke werden gleichzeitig vorbereitet.
+    const stuecke = [saetze[0]];
+    for (const x of saetze.slice(1)) {
+      if (stuecke.length > 1 && (stuecke[stuecke.length - 1] + ' ' + x).length <= 420) stuecke[stuecke.length - 1] += ' ' + x;
+      else stuecke.push(x);
+    }
+    const holen = stuecke.map((s) => stimmeHolen(s).then((url) => ({ url }), (fehler) => ({ fehler })));
     for (let i = 0; i < stuecke.length; i++) {
-      await warteAuf(i);
-      if (lauf !== sprechLauf) return;
-      if (!urls[i]) throw fehler || new Error('Stimme fehlt');
+      const r = await holen[i];
+      if (lauf !== sprechLauf) { holen.slice(i).forEach((h) => h.then((x) => x.url && URL.revokeObjectURL(x.url))); return; }
+      if (!r.url) throw r.fehler || new Error('Stimme fehlt');
       if (moAudio.src) URL.revokeObjectURL(moAudio.src);
-      moAudio.src = urls[i];
+      moAudio.src = r.url;
       window.dispatchEvent(new CustomEvent('mo:satz', { detail: stuecke[i] })); // Erdkugel dreht zum genannten Ort
       await moAudio.play();
       await new Promise((ok) => { moAudio.onended = ok; moAudio.onerror = ok; });
