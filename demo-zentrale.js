@@ -79,18 +79,24 @@ const DemoZentrale = (() => {
   function sitzungStarten(s) {
     const sitz = {
       id: 's' + (nr + 1), titel: s.titel, ziel: s.ziel, ordner: s.ordner, rechte: s.rechte, hoechstMin: s.hoechstMin, status: 'laeuft',
-      haengt: false, start: jetzt(), letzteZeilen: ['Gestartet in ' + s.ordner], ausgabe: ['Gestartet in ' + s.ordner], auftrag: s.auftrag, ergebnis: '', fehler: ''
+      haengt: false, start: jetzt(), letzteZeilen: ['Gestartet in ' + s.ordner], ausgabe: ['Gestartet in ' + s.ordner], auftrag: s.auftrag, ergebnis: '', fehler: '',
+      live: { plan: [{ text: 'Seiten finden', status: 'laeuft' }, { text: 'Links prüfen', status: 'offen' }, { text: 'Bericht schreiben', status: 'offen' }], jetzt: 'Sucht Dateien **/*.html', gedanke: '', schritte: [] }
     };
     z.sitzungen.push(sitz);
     agent('waechter', 'arbeitet', '1 Sitzung unter Beobachtung');
     const schritte = ['→ Glob **/*.html', '→ Read index.html', '→ Read kontakt.html', 'Prüfe 42 Links …', '→ Grep href="http', '2 defekte Links gefunden: /impressum-alt, /preise-2024'];
     schritte.forEach((zeile, i) => setTimeout(() => {
       if (sitz.status !== 'laeuft') return;
-      sitz.ausgabe.push(zeile); sitz.letzteZeilen = sitz.ausgabe.slice(-4); ereignis('ausgabe', { sitzungId: sitz.id });
+      sitz.ausgabe.push(zeile); sitz.letzteZeilen = sitz.ausgabe.slice(-4);
+      const l = sitz.live, stufe = i < 2 ? 0 : i < 5 ? 1 : 2;
+      l.plan.forEach((p, k) => { p.status = k < stufe ? 'fertig' : k === stufe ? 'laeuft' : 'offen'; });
+      l.jetzt = zeile.replace('→ Read ', 'Liest ').replace('→ Grep ', 'Durchsucht den Code nach ').replace('→ Glob ', 'Sucht Dateien ');
+      l.schritte.push({ zeit: jetzt(), text: l.jetzt });
+      ereignis('ausgabe', { sitzungId: sitz.id });
     }, 1800 * (i + 1)));
     setTimeout(() => {
       if (sitz.status !== 'laeuft') return;
-      sitz.status = 'fertig'; sitz.ende = jetzt();
+      sitz.status = 'fertig'; sitz.ende = jetzt(); sitz.live.plan.forEach((p) => { p.status = 'fertig'; }); sitz.live.jetzt = '';
       sitz.ergebnis = 'Ich habe 42 Links geprüft. Zwei verweisen ins Leere: /impressum-alt und /preise-2024. Geändert habe ich nichts – Vorschlag: auf /impressum und /preise umleiten.';
       ereignis('sitzung', { sitzungId: sitz.id });
       agent('waechter', 'bereit', '');

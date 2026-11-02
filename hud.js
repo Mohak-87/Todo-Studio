@@ -95,7 +95,11 @@
       const fertig = a.schritte.filter((s) => s.status === 'fertig').length;
       h += zeile(`<i class="punkt aktiv"></i>${esc(a.titel)}`, `${fertig}/${a.schritte.length}`);
     });
-    sitzungen.slice(0, 2).forEach((s) => { h += zeile(`<i class="punkt aktiv"></i>${esc(s.titel)}`, s.status === 'wartet' ? 'wartet' : 'läuft'); });
+    sitzungen.slice(0, 2).forEach((s) => {
+      const l = s.live || { plan: [] };
+      const fertig = l.plan.filter((p) => p.status === 'fertig').length;
+      h += zeile(`<i class="punkt aktiv"></i>${esc(s.titel)}${l.jetzt ? `<small class="hud-jetzt">${esc(l.jetzt)}</small>` : ''}`, s.status === 'wartet' ? 'wartet' : l.plan.length ? `${fertig}/${l.plan.length}` : 'läuft');
+    });
     if (!laufend.length && !sitzungen.length) h += zeile('<i class="punkt"></i>Kein Auftrag in Arbeit', null, 'leise');
     return panel('Team', h + '</ul>', 'sitzungen');
   }

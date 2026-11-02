@@ -248,6 +248,43 @@ const Jarvis = (() => {
     j.ersteRunde = false;
   }
 
+  // ---------- Live: was MO gerade baut (wie Claudes Aufgabenliste) ----------
+  const liveEl = $('#liveArbeit');
+  const liveOffen = new Set();
+  function liveZeichnen() {
+    const z = j.zustand;
+    const jetzt = Date.now();
+    const liste = ((z && z.sitzungen) || []).filter((s) => ['laeuft', 'wartet'].includes(s.status)
+      || (s.ende && jetzt - Date.parse(s.ende) < 120000 && s.live && s.live.plan && s.live.plan.length));
+    liveEl.hidden = !liste.length;
+    if (!liste.length) { liveEl.innerHTML = ''; return; }
+    liveEl.innerHTML = liste.slice(-2).reverse().map((s) => {
+      const l = s.live || { plan: [], schritte: [] };
+      const laeuft = s.status === 'laeuft';
+      const min = s.start ? Math.max(0, Math.round((jetzt - Date.parse(s.start)) / 60000)) : 0;
+      const fertig = l.plan.filter((p) => p.status === 'fertig').length;
+      const [st] = SITZUNG_STATUS[s.status] || [s.status];
+      const plan = l.plan.length ? `<ul class="live-plan">${l.plan.map((p) => `<li class="${p.status}"><i>${p.status === 'fertig' ? '✓' : p.status === 'laeuft' ? '' : '○'}</i>${esc(p.text)}</li>`).join('')}</ul>` : '';
+      const offen = liveOffen.has(s.id);
+      const schritte = offen && l.schritte.length ? `<ol class="live-schritte">${l.schritte.slice().reverse().map((x) => `<li><small>${esc(new Date(x.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))}</small>${esc(x.text)}</li>`).join('')}</ol>` : '';
+      return `<div class="live-karte${laeuft ? ' aktiv' : ''}">
+        <div class="live-kopf"><span class="live-puls"></span><b>${esc(s.art === 'bau' ? 'MO baut' : 'Claude arbeitet')}: ${esc(s.titel)}</b>
+          <small>${laeuft ? (min ? 'seit ' + min + ' Min.' : 'gerade gestartet') : esc(st)}${l.plan.length ? ' · ' + fertig + '/' + l.plan.length : ''}</small></div>
+        ${laeuft && (l.jetzt || l.gedanke) ? `<div class="live-jetzt">${esc(l.jetzt || l.gedanke)}</div>` : ''}
+        ${plan}${schritte}
+        <div class="live-knoepfe"><button class="knopf klein" data-j="live-schritte" data-id="${esc(s.id)}">${offen ? 'Schritte ausblenden' : 'Letzte Schritte'}</button>
+          <button class="knopf klein" data-j="details" data-id="${esc(s.id)}">Protokoll</button>
+          ${laeuft ? `<button class="knopf klein gefahr" data-j="stoppen" data-id="${esc(s.id)}">${s.art === 'bau' ? 'Abbrechen' : 'Stoppen'}</button>` : ''}</div>
+      </div>`;
+    }).join('');
+  }
+  liveEl.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-j="live-schritte"]');
+    if (el) { const id = el.dataset.id; liveOffen.has(id) ? liveOffen.delete(id) : liveOffen.add(id); liveZeichnen(); return; }
+    jKlick(ev);
+  });
+  setInterval(() => { if (!liveEl.hidden) liveZeichnen(); }, 30000); // Minutenanzeige und Ausblenden fertiger Karten
+
   function allesZeichnen() {
     const z = j.zustand;
     if (z) agentenStand = { agenten: z.agenten, jarvis: z.jarvis };
@@ -255,6 +292,7 @@ const Jarvis = (() => {
     const zaehler = $('#zaehlerFreigaben');
     zaehler.hidden = !offen; zaehler.textContent = offen;
     chatZeichnen();
+    liveZeichnen();
     wolkeAktualisieren();
     document.dispatchEvent(new CustomEvent('studio:daten')); // Seitenanzeigen auffrischen
     if (Studio.z.ansicht === 'sitzungen' && arbeit.reiter !== 'bibliothek' && arbeit.reiter !== 'agenten') Studio.zeichnen();

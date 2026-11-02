@@ -126,6 +126,26 @@ a { color: var(--akzent); }
 .gespraech-knopf:hover { color: var(--text); border-color: var(--kante-hell); }
 .gespraech-knopf.aktiv { color: #fff; border-color: var(--jarvis); background: rgba(167, 139, 250, .22); box-shadow: 0 0 0 3px rgba(167, 139, 250, .15); animation: lauschen 2s ease-in-out infinite; }
 @keyframes lauschen { 50% { box-shadow: 0 0 0 6px rgba(167, 139, 250, .05); } }
+.live-arbeit { padding: 0 12px 8px; display: flex; flex-direction: column; gap: 8px; max-height: 46%; overflow-y: auto; scrollbar-width: thin; }
+.live-karte { border: 1px solid var(--kante); border-radius: var(--radius-klein); background: rgba(167, 139, 250, .06); padding: 10px 12px; font-size: .82rem; }
+.live-karte.aktiv { border-color: rgba(167, 139, 250, .45); }
+.live-kopf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.live-kopf b { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-kopf small { color: var(--text-3); }
+.live-puls { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex: none; }
+.live-karte.aktiv .live-puls { background: var(--jarvis); animation: pulsieren 1.4s ease-in-out infinite; }
+.live-jetzt { margin: 6px 0 2px; color: var(--text-2); font-family: ui-monospace, Consolas, monospace; font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-plan, .live-schritte { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.live-plan li { display: flex; gap: 8px; align-items: baseline; color: var(--text-2); }
+.live-plan li i { font-style: normal; width: 14px; flex: none; text-align: center; color: var(--text-3); }
+.live-plan li.fertig { color: var(--text-3); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .2); }
+.live-plan li.fertig i { color: var(--ok); text-decoration: none; }
+.live-plan li.laeuft { color: var(--text); font-weight: 500; }
+.live-plan li.laeuft i::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--jarvis); border-right-color: transparent; animation: drehen .9s linear infinite; }
+.live-schritte { border-top: 1px solid var(--kante); padding-top: 6px; font-family: ui-monospace, Consolas, monospace; font-size: .72rem; color: var(--text-3); }
+.live-schritte small { margin-right: 8px; }
+.live-knoepfe { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) { .live-karte.aktiv .live-puls, .live-plan li.laeuft i::before { animation: none; } }
 .verlauf { flex: 1; overflow-y: auto; padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 10px; scrollbar-width: thin; }
 .nachricht { max-width: 88%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; animation: rein .25s ease-out; }
 @keyframes rein { from { opacity: 0; transform: translateY(6px); } }
@@ -486,3 +506,5 @@ body.globus-an .bereich-label, body.globus-an .agent-label { display: none; }
   body.chat-offen .globus-karte { display: none; }
 }
 .erde-knopf { display: inline-flex; margin-top: 8px; }
+
+.hud-jetzt { display: block; color: var(--text-3); font-size: .7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 190px; }
