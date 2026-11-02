@@ -508,3 +508,49 @@ body.globus-an .bereich-label, body.globus-an .agent-label { display: none; }
 .erde-knopf { display: inline-flex; margin-top: 8px; }
 
 .hud-jetzt { display: block; color: var(--text-3); font-size: .7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 190px; }
+
+/* ---------- Notizen & Dateien (dateien.js) ---------- */
+.unsichtbar { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; left: -9999px; }
+.datei-knopf { cursor: pointer; user-select: none; -webkit-user-select: none; }
+.datei-knopf.laedt { border-color: var(--jarvis); box-shadow: 0 0 0 3px rgba(167, 139, 250, .2); animation: pulsieren 1.4s ease-in-out infinite; }
+label.knopf { cursor: pointer; justify-content: center; }
+.hinweis-zeile { margin: 0 0 10px; padding: 8px 12px; border-radius: 12px; font-size: .82rem; color: var(--text-2); background: rgba(251, 191, 36, .08); border: 1px solid rgba(251, 191, 36, .25); }
+.hinweis-zeile.fehler { background: rgba(251, 113, 133, .08); border-color: rgba(251, 113, 133, .35); color: #fecdd3; }
+.notiz-neu { margin-bottom: 12px; }
+.notiz-neu .feld { margin-top: 0; }
+.notiz-neu textarea { min-height: 76px; }
+.filter-chips { margin: 0 0 10px; }
+.chip-knopf { border: 1px solid var(--kante); background: var(--glas-hell); color: var(--text-2); border-radius: 999px; padding: 6px 12px; font-size: .8rem; min-height: 32px; }
+.chip-knopf.aktiv { background: rgba(255, 255, 255, .16); border-color: var(--kante-hell); color: var(--text); font-weight: 600; }
+.notiz-liste > li, .datei-liste > li { flex-direction: column; gap: 6px; }
+.notiz-kopf { display: flex; align-items: center; gap: 8px; width: 100%; }
+.notiz-kopf small { color: var(--text-3); font-size: .76rem; flex: 1; }
+.notiz-liste .titel { white-space: pre-wrap; line-height: 1.45; }
+.chip.mentor { background: rgba(167, 139, 250, .16); color: #ddd6fe; }
+.upload-box { border: 1px dashed var(--kante-hell); border-radius: 16px; padding: 12px; margin-bottom: 12px; background: rgba(255, 255, 255, .03); }
+.upload-knoepfe { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.upload-knoepfe .knopf { min-height: 46px; }
+.klein-text { font-size: .78rem; margin: 8px 2px 0; }
+.upload-status { margin-top: 10px; font-size: .82rem; }
+.upload-zeile { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+.upload-zeile b { overflow-wrap: anywhere; }
+.upload-zeile span { color: var(--text-2); }
+.upload-balken { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .08); margin-top: 6px; overflow: hidden; }
+.upload-balken i { display: block; height: 100%; background: var(--jarvis); transition: width .2s; }
+.upload-status.ok .upload-balken i { background: var(--ok); }
+.upload-status.fehler .upload-balken i { background: var(--fehler); }
+.upload-status.fehler .upload-zeile span { color: #fecdd3; }
+.datei-kopf { display: flex; gap: 10px; align-items: flex-start; width: 100%; }
+.datei-symbol { font-size: 1.4rem; line-height: 1; flex: none; }
+.datei-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.datei-info small { color: var(--text-3); font-size: .76rem; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.datei-auszug { margin: 0; font-size: .8rem; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ablage-ziel { position: fixed; inset: 0; z-index: 50; display: none; place-items: center; background: rgba(4, 3, 10, .6); pointer-events: none; }
+.ablage-ziel span { padding: 22px 30px; border: 2px dashed var(--jarvis); border-radius: 22px; background: var(--glas-stark); font-size: 1.1rem; }
+body.datei-ziehen .ablage-ziel { display: grid; }
+@media (max-width: 860px) {
+  .dock { gap: 2px; padding: 4px; }
+  .dock button { min-width: 0; font-size: .6rem; padding: 0; }
+  .eingabe-zeile { gap: 6px; }
+  .datei-knopf { width: 42px; }
+}

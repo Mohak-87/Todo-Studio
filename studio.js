@@ -9,7 +9,7 @@ const Studio = (() => {
   const inhalt = $('#inhalt');
   const dlg = $('#dialog');
   const dlgForm = $('#dialogInhalt');
-  const TITEL = { heute: 'Heute', aufgaben: 'Aufgaben', termine: 'Termine', ideen: 'Ideen', mails: 'Mails', sitzungen: 'Arbeit & Team' };
+  const TITEL = { heute: 'Heute', aufgaben: 'Aufgaben', termine: 'Termine', ideen: 'Ideen', mails: 'Mails', notizen: 'Notizen', sitzungen: 'Arbeit & Team' };
   const fremdeAnsichten = {};
 
   let cfg = einstellungenLaden();

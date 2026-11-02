@@ -72,6 +72,7 @@
         <button type="button" data-typ="idee">Idee</button>
       </div>
       <div class="eingabe-zeile">
+        <label class="mikro datei-knopf" id="knopfDatei" for="dateiWahl" role="button" tabindex="0" title="Datei hochladen (PDF, Bild, Text) – MO kann damit arbeiten" aria-label="Datei hochladen">📎</label>
         <button type="button" class="mikro" id="knopfMikro" aria-label="Sprechen">🎙</button>
         <textarea id="eingabeText" rows="1" enterkeyhint="send" placeholder="Womit kann ich dienen?"></textarea>
         <button type="submit" class="senden" aria-label="Senden">➤</button>
@@ -90,8 +91,15 @@
     <button data-ansicht="termine"><span>◷</span>Termine</button>
     <button data-ansicht="ideen"><span>✧</span>Ideen</button>
     <button data-ansicht="mails"><span>✉</span>Mails</button>
+    <button data-ansicht="notizen"><span>✎</span>Notizen</button>
     <button data-ansicht="sitzungen"><span>⌘</span>Arbeit<em class="zaehler" id="zaehlerFreigaben" hidden></em></button>
   </nav>
+
+  <!-- Dateiauswahl für den Upload (Datei bzw. Kamera am Handy); die sichtbaren Knöpfe sind <label for=…> -->
+  <input type="file" id="dateiWahl" class="unsichtbar" multiple
+    accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.txt,.md,.csv,.json,application/pdf,image/*,text/plain,text/markdown,text/csv">
+  <input type="file" id="fotoWahl" class="unsichtbar" accept="image/*" capture="environment">
+  <div class="ablage-ziel" aria-hidden="true"><span>📎 Datei loslassen – MO bekommt sie</span></div>
 
   <div class="agent-karte glas" id="agentKarte" hidden></div>
   <dialog id="dialog"><form method="dialog" id="dialogInhalt"></form></dialog>
@@ -105,6 +113,7 @@
   <script src="push.js"></script>
   <script src="weckwort.js"></script>
   <script src="jarvis.js"></script>
+  <script src="dateien.js"></script>
   <script src="hud.js"></script>
   <script type="module" src="wolke.js"></script>
 </body>

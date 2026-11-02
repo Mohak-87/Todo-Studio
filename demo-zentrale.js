@@ -179,6 +179,16 @@ const DemoZentrale = (() => {
   function zustand() { return { ...z, agenten: agenten.concat(sitzungAgenten()), letzteNr: nr, katalogVersion: KATALOG.version, routinen: demoRoutinen(), gedaechtnis: { erinnerungen: 12, tage: 3 } }; }
   const kopie = (x) => JSON.parse(JSON.stringify(x));
 
+  const vorTagen = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  const demoNotizen = {
+    ideen: [
+      { art: 'idee', id: 'i1', text: 'Newsletter für Bestandskunden einmal im Quartal', zeit: vorTagen(1) },
+      { art: 'idee', id: 'i2', text: 'Podcast-Folge über Fokus-Routinen aufnehmen', zeit: vorTagen(4) }
+    ],
+    mentor: [{ art: 'mentor', id: 'm1', text: 'Ziel: bis Jahresende drei Stammkunden mehr gewinnen.', zeit: vorTagen(2).slice(0, 10) }]
+  };
+  const demoDateien = [{ id: 'u1', name: 'Exposé Musterstraße 5.pdf', pfad: '/demo/uploads/u1-Expose_Musterstrasse_5.pdf', groesse: 842000, typ: 'application/pdf', art: 'pdf', zeit: vorTagen(0.2), textStatus: 'ok', textZeichen: 5400, textHinweis: '', auszug: 'Helle 3-Zimmer-Wohnung, 78 m², Balkon nach Süden, ruhige Seitenstraße …' }];
+
   function antworten(methode, pfad, body) {
     if (pfad === '/api/zustand') return kopie(zustand());
     if (pfad === '/api/katalog') return KATALOG;
@@ -190,6 +200,17 @@ const DemoZentrale = (() => {
       return { ereignisse: kopie(ereignisse.filter((e) => e.nr > seit)), letzteNr: nr };
     }
     if (pfad === '/api/nachricht') { nachricht(body.text); return { ok: true }; }
+    // Notizen und Dateien (nur im Speicher dieser Demo)
+    if (pfad === '/api/notizen' && methode === 'GET') return kopie({ ideen: demoNotizen.ideen, mentor: demoNotizen.mentor, ideenFehler: '' });
+    if (pfad === '/api/notizen/neu') { const i = { art: 'idee', id: 'i' + Date.now(), text: String(body.text || '').trim(), zeit: new Date().toISOString() }; demoNotizen.ideen.unshift(i); return { id: i.id, text: i.text, erstellt: i.zeit }; }
+    if (pfad === '/api/notizen/loeschen') { const l = body.art === 'mentor' ? demoNotizen.mentor : demoNotizen.ideen; const k = l.findIndex((x) => x.id === body.id); if (k >= 0) l.splice(k, 1); return { geloescht: body.id }; }
+    if (pfad === '/api/uploads' && methode === 'GET') return kopie({ ordner: '/demo/uploads', maxMB: 20, dateien: demoDateien });
+    if (pfad === '/api/uploads') {
+      const d = { id: 'u' + Date.now(), name: body.name, pfad: '/demo/uploads/' + body.name, groesse: body.groesse || 1, typ: body.typ || '', art: /^image\//.test(body.typ) ? 'bild' : /pdf/.test(body.typ) ? 'pdf' : 'text', zeit: new Date().toISOString(), textStatus: 'ok', textZeichen: 1200, textHinweis: '', auszug: 'Demo: Hier stünde der Anfang des ausgelesenen Textes.' };
+      if (d.art === 'bild') { d.textStatus = 'bild'; d.auszug = ''; d.textHinweis = 'Bild – kein Text.'; }
+      demoDateien.unshift(d); return kopie(d);
+    }
+    if (pfad === '/api/uploads/loeschen') { const k = demoDateien.findIndex((x) => x.id === body.id); if (k >= 0) demoDateien.splice(k, 1); return { geloescht: body.id }; }
     if (pfad === '/api/freigabe') {
       const v = z.vorschlaege.find((x) => x.id === body.id);
       if (!v || !['offen', 'zurueckgestellt'].includes(v.status)) throw new Error('Über diesen Vorschlag wurde bereits entschieden.');
