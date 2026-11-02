@@ -219,6 +219,14 @@ const Jarvis = (() => {
     </div>`;
   }
 
+  /** Knappe Statuszeile je Aktion unter MOs Antwort (z. B. „✓ Termin angelegt“, „✗ Fehler: …“). */
+  const AKTION_ZEICHEN = { ok: '✓', fehler: '✗', wartet: '⏳', abgelehnt: '–' };
+  function aktionenHtml(m) {
+    if (!Array.isArray(m.aktionen) || !m.aktionen.length) return '';
+    return `<span class="leise" style="display:block;margin-top:6px;font-size:.8rem">${m.aktionen.map((a) =>
+      `<span style="display:block"${a.status === 'fehler' ? ' class="fehlertext"' : ''}>${AKTION_ZEICHEN[a.status] || '·'} ${esc(a.text)}</span>`).join('')}</span>`;
+  }
+
   function chatZeichnen() {
     const server = (j.zustand && j.zustand.chat) || [];
     briefkastenAbgleichen();
@@ -230,7 +238,7 @@ const Jarvis = (() => {
       const zeit = new Date(m.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
       const hinweis = m.imBriefkasten ? '<span class="briefkasten-hinweis">⏳ im Briefkasten – MO bearbeitet das, sobald die Zentrale läuft</span>'
         : m.nachgereicht ? `<span class="briefkasten-hinweis">✉ unterwegs geschrieben um ${esc(new Date(m.nachgereicht).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))}</span>` : '';
-      h += `<div class="nachricht ${m.von}${m.imBriefkasten ? ' wartend' : ''}">${hinweis}${esc(m.text)}${m.prompt ? `<div class="prompt-block"><div class="prompt-kopf"><span>Prompt</span><button class="knopf klein" data-j="prompt-kopieren" data-id="${esc(m.id)}">Kopieren</button></div><pre>${esc(m.prompt)}</pre></div>` : ''}${Array.isArray(m.orte) && m.orte.length ? `<button class="knopf klein erde-knopf" data-j="erde-zeigen" data-id="${esc(m.id)}">🌍 Auf der Erde zeigen</button>` : ''}<span class="zeit">${zeit}</span></div>`;
+      h += `<div class="nachricht ${m.von}${m.imBriefkasten ? ' wartend' : ''}">${hinweis}${esc(m.text)}${m.prompt ? `<div class="prompt-block"><div class="prompt-kopf"><span>Prompt</span><button class="knopf klein" data-j="prompt-kopieren" data-id="${esc(m.id)}">Kopieren</button></div><pre>${esc(m.prompt)}</pre></div>` : ''}${Array.isArray(m.orte) && m.orte.length ? `<button class="knopf klein erde-knopf" data-j="erde-zeigen" data-id="${esc(m.id)}">🌍 Auf der Erde zeigen</button>` : ''}${aktionenHtml(m)}<span class="zeit">${zeit}</span></div>`;
       if (m.vorschlagId) h += vorschlagHtml(vorschlag(m.vorschlagId));
     }
     if (j.teil) h += `<div class="nachricht jarvis live">${esc(j.teil)}<span class="cursor"></span></div>`;
@@ -369,7 +377,7 @@ const Jarvis = (() => {
 
   function meldungenHtml(z) {
     const n = z.ntfy || {};
-    return `<div class="karte">
+    return `${window.Push ? Push.karteHtml(z) : ''}<div class="karte">
       <h3>Push-Meldungen aufs Handy (ntfy)</h3>
       <p class="leise">Wenn das Studio geschlossen ist, meldet sich MO kurz und neutral: „Eine Freigabe wartet“, „Ergebnisse sind fertig“, „Ein Termin beginnt in Kürze“ – ohne Inhalte.</p>
       <ol class="schritte-liste">
