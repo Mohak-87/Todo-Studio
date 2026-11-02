@@ -61,7 +61,8 @@ try {
   const { OutputPass } = await import('three/addons/postprocessing/OutputPass.js');
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-  let pixelRatio = Math.min(window.devicePixelRatio || 1, schwach ? 1.25 : 1.75);
+  const PIXEL_VOLL = Math.min(window.devicePixelRatio || 1, 2); // scharf auch auf Retina- und Handy-Displays
+  let pixelRatio = PIXEL_VOLL;
   renderer.setPixelRatio(pixelRatio);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -78,21 +79,21 @@ try {
 
   // ---------- Texturen ----------
   function leuchtTextur() {
-    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const c = document.createElement('canvas'); c.width = c.height = 256;
     const g = c.getContext('2d');
-    const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-    r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.15, 'rgba(255,255,255,.9)');
-    r.addColorStop(0.4, 'rgba(255,255,255,.25)'); r.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+    const r = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.12, 'rgba(255,255,255,.92)');
+    r.addColorStop(0.35, 'rgba(255,255,255,.22)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 256, 256);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   }
   function gasTextur() { // weiche, unregelmäßige Wolkenflocke
-    const n = 128, c = document.createElement('canvas'); c.width = c.height = n;
+    const n = 256, c = document.createElement('canvas'); c.width = c.height = n;
     const g = c.getContext('2d'), bild = g.createImageData(n, n);
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
       const dx = (x - n / 2) / (n / 2), dy = (y - n / 2) / (n / 2);
       const d = Math.sqrt(dx * dx + dy * dy);
-      const f = fbm(x * 0.06, y * 0.06, 4.2);
+      const f = fbm(x * 0.03, y * 0.03, 4.2);
       const a = Math.max(0, 1 - d) ** 1.6 * (0.35 + f * 1.1);
       const i = (y * n + x) * 4;
       bild.data[i] = bild.data[i + 1] = bild.data[i + 2] = 255;
@@ -210,7 +211,7 @@ try {
 
   // 3) Feiner Sternenstaub – funkelnde Körnchen im Nebel
   const kornMat = punktMaterial({ textur: LEUCHT, skala: 40, alphaFaktor: 0.4 });
-  const korn = punkteWolke(verteilen(schwach ? 2600 : 6500, 16, 2.2), {
+  const korn = punkteWolke(verteilen(schwach ? 4500 : 11000, 16, 2.2), {
     groesse: () => 0.5 + Math.random() ** 4 * 3.2,
     alpha: (d) => 0.22 + Math.min(0.4, d * 0.3),
     farbe: (x, y, z, d, c) => nebelFarbe(x * 0.8, y * 0.8, z * 0.8, c).lerp(new THREE.Color('#ffffff'), 0.25)
@@ -218,7 +219,7 @@ try {
   korn.renderOrder = 2;
 
   // 4) Hintergrundsterne
-  const STERNE = schwach ? 900 : 2200;
+  const STERNE = schwach ? 1600 : 3200;
   const sternPos = new Float32Array(STERNE * 3), sternFarbe = new Float32Array(STERNE * 3);
   const sc = new THREE.Color();
   for (let i = 0; i < STERNE; i++) {
@@ -237,6 +238,11 @@ try {
   const kern = new THREE.Sprite(new THREE.SpriteMaterial({ map: LEUCHT, color: new THREE.Color('#fff4ff'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   kern.scale.setScalar(2.6);
   kern.renderOrder = 3;
+  const kernPunkt = new THREE.Sprite(new THREE.SpriteMaterial({ map: LEUCHT, color: new THREE.Color('#ffffff'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  kernPunkt.scale.setScalar(0.9);
+  kernPunkt.renderOrder = 4;
+  kernPunkt.raycast = () => {}; // Antippen geht weiter an den Kern
+  scene.add(kernPunkt);
   kern.userData.agent = { id: 'jarvis', name: 'MO', aufgabe: 'Hauptagent und Ihr einziger Ansprechpartner. Verteilt Arbeit an die Sub-Agenten und holt vor allem mit Folgen Ihre Freigabe ein.', status: 'bereit' };
   scene.add(kern);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: LEUCHT, color: new THREE.Color('#7c4dff'), transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -245,11 +251,11 @@ try {
 
   // ---------- MO spricht: Impulse nur am Kern (Silbenrhythmus + Schallwellen-Ringe) ----------
   function ringTextur() {
-    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const c = document.createElement('canvas'); c.width = c.height = 256;
     const g = c.getContext('2d');
-    const r = g.createRadialGradient(64, 64, 34, 64, 64, 62);
-    r.addColorStop(0, 'rgba(255,255,255,0)'); r.addColorStop(0.55, 'rgba(255,255,255,.9)'); r.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+    const r = g.createRadialGradient(128, 128, 70, 128, 128, 124);
+    r.addColorStop(0, 'rgba(255,255,255,0)'); r.addColorStop(0.55, 'rgba(255,255,255,.95)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 256, 256);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   }
   const RING = ringTextur();
@@ -601,9 +607,9 @@ try {
   }
 
   // ---------- Leuchteffekt ----------
-  const composer = new EffectComposer(renderer);
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), schwach ? 0.6 : 0.75, 0.55, 0.32);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), schwach ? 0.6 : 0.72, 0.42, 0.36);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
   let mitBloom = true;
@@ -627,7 +633,7 @@ try {
     renderer.setSize(w, h, false);
     composer.setPixelRatio(pixelRatio);
     composer.setSize(w, h);
-    bloom.resolution.set(w * (schwach ? 0.35 : 0.5), h * (schwach ? 0.35 : 0.5));
+    bloom.resolution.set(w * (schwach ? 0.5 : 0.75), h * (schwach ? 0.5 : 0.75));
     camera.aspect = w / h;
     const chatOffen = document.body.classList.contains('chat-offen');
     if (w > 860) camera.setViewOffset(w, h, chatOffen ? w / 2 - freieMitte(w) : 0, 0, w, h);
@@ -724,7 +730,18 @@ try {
   const uhr = new THREE.Clock();
   const ziel = new THREE.Vector3(), v = new THREE.Vector3();
   const KERN_FARBE = new THREE.Color('#fff4ff'), KERN_AUS = new THREE.Color('#5c5670'), KERN_FEHLER = new THREE.Color('#ffb4c2');
-  let bilder = 0, messStart = performance.now(), stufe = 0, pulsIst = 0, helligkeit = 1;
+  let bilder = 0, messStart = performance.now(), stufe = 0, pulsIst = 0, helligkeit = 1, langsam = 0, schnell = 0;
+  const startZeit = performance.now();
+  /** Qualitätsstufe 0 (voll) … 3 (sparsam). */
+  function qualitaetStufe(neu) {
+    stufe = neu;
+    const teil = (o, anteil) => o.geometry.setDrawRange(0, Math.floor(o.geometry.attributes.position.count * anteil));
+    teil(korn, stufe >= 1 ? 0.5 : 1); teil(gas, stufe >= 1 ? 0.6 : 1);
+    for (const o of armTeile) if (o.isPoints) teil(o, stufe >= 1 ? 0.5 : 1);
+    pixelRatio = stufe >= 2 ? Math.min(PIXEL_VOLL, 1) : stufe === 1 ? Math.min(PIXEL_VOLL, 1.5) : PIXEL_VOLL;
+    renderer.setPixelRatio(pixelRatio); materialien.forEach((m) => { m.uniforms.uPixel.value = pixelRatio; }); groesseAnpassen();
+    mitBloom = stufe < 3;
+  }
   const materialien = [gasMat, kornMat, staubMat, armGasMat, armKornMat];
 
   function bild() {
@@ -754,7 +771,9 @@ try {
     }
     kern.material.color.copy(jarvisStatus === 'getrennt' ? KERN_AUS : jarvisStatus === 'fehler' ? KERN_FEHLER : KERN_FARBE);
     halo.material.opacity = (0.25 + pulsIst * 0.25 + kernStoss * 0.22) * helligkeit;
-    bloom.strength = (schwach ? 0.6 : 0.75) + pulsIst * 0.35;
+    kernPunkt.material.color.copy(kern.material.color);
+    kernPunkt.scale.setScalar(0.9 * atem * (1 + kernStoss * 0.3));
+    bloom.strength = (schwach ? 0.6 : 0.72) + pulsIst * 0.35;
 
     const abstand = camera.position.distanceTo(controls.target);
     for (const e of sprites.values()) {
@@ -785,20 +804,16 @@ try {
     controls.update();
     if (mitBloom) composer.render(); else renderer.render(scene, camera);
 
-    // Schwaches Gerät: stufenweise vereinfachen, damit alles flüssig bleibt
+    // Schwaches Gerät: stufenweise vereinfachen – aber nur bei anhaltendem Ruckeln, und wieder schärfer, wenn es läuft
     bilder++;
     const jetzt = performance.now();
-    if (jetzt - messStart > 2500) {
+    if (document.hidden) { bilder = 0; messStart = jetzt; } // im Hintergrund drosselt der Browser – das ist kein Ruckeln
+    else if (jetzt - messStart > 3000) {
       const fps = bilder * 1000 / (jetzt - messStart);
-      if (fps < 38 && stufe < 3) {
-        stufe++;
-        if (stufe === 1) {
-          korn.geometry.setDrawRange(0, Math.floor(korn.geometry.attributes.position.count * 0.5)); gas.geometry.setDrawRange(0, Math.floor(gas.geometry.attributes.position.count * 0.6));
-          for (const o of armTeile) if (o.isPoints) o.geometry.setDrawRange(0, Math.floor(o.geometry.attributes.position.count * 0.5));
-        }
-        if (stufe === 2) { pixelRatio = 1; renderer.setPixelRatio(1); materialien.forEach((m) => { m.uniforms.uPixel.value = 1; }); groesseAnpassen(); }
-        if (stufe === 3) mitBloom = false;
-      }
+      if (jetzt - startZeit < 6000) { /* Anlaufphase (Shader, Texturen): nicht bewerten */ }
+      else if (fps < 30) { langsam++; schnell = 0; if (langsam >= 2 && stufe < 3) { qualitaetStufe(stufe + 1); langsam = 0; } }
+      else if (fps > 52) { schnell++; langsam = 0; if (schnell >= 3 && stufe > 0) { qualitaetStufe(stufe - 1); schnell = 0; } }
+      else { langsam = 0; schnell = 0; }
       bilder = 0; messStart = jetzt;
     }
   }
