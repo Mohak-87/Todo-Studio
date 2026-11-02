@@ -422,8 +422,8 @@ const Studio = (() => {
       <label class="feld"><span>Kopplungsschlüssel der Zentrale</span><input name="zentraleSchluessel" type="password" autocomplete="off" value="${esc(cfg.zentraleSchluessel)}"></label>
       <p class="hilfe">Optional – nur für MO und Claude-Aufgaben. Adresse: zeigt <b>tailscale-einrichten.cmd</b> an. Schlüssel: im Ordner <i>zentrale</i> den Befehl <code>node zentrale.mjs --schluessel</code> ausführen.</p>
       <p class="abschnitt">Sprache</p>
-      <label class="check"><input type="checkbox" name="aufJarvisHoeren" ${cfg.aufJarvisHoeren ? 'checked' : ''}> Auf das Rufwort „Hey MO“ hören, solange das Studio geöffnet ist</label>
-      <p class="hilfe">„Hey MO“ startet ein Gespräch. Danach reden Sie einfach weiter – ohne Rufwort. Es endet mit „Danke, das war's“ oder wenn eine Weile niemand spricht.</p>
+      <label class="check"><input type="checkbox" name="aufJarvisHoeren" ${cfg.aufJarvisHoeren ? 'checked' : ''}> Auf das Rufwort „Hey MO“ oder „Hey Jarvis“ hören, solange das Studio geöffnet ist</label>
+      <p class="hilfe">„Hey MO“ (oder „Hey Jarvis“) startet ein Gespräch. Danach reden Sie einfach weiter – ohne Rufwort. Es endet mit „Danke, das war's“ oder wenn eine Weile niemand spricht.</p>
       <div class="feld-reihe" style="align-items:flex-end">
         <label class="feld" style="flex:1"><span>Stimme von MO</span><select name="stimmeName">${stimmenOptionen(cfg.stimmeName)}</select></label>
         <button type="button" class="knopf klein" data-stimme-probe style="margin-bottom:12px">▶ Probe</button>

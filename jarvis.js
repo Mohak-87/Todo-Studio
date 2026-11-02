@@ -844,9 +844,7 @@ const Jarvis = (() => {
     return r || String(t).trim();
   }
   const ENDE = /^(ende|stopp|stop|schluss|das wars?|das war's|danke,? das war'?s|gespräch beenden|tschüss|auf wiedersehen)[.!]?$/i;
-  // Rufwort „Hey MO“ – die Spracherkennung schreibt es unterschiedlich (Mo, Moh, Moe, M. O., …)
-  // Die Erkennung schreibt es oft zusammen („Heimo“, „Heymo“, „Haimo“) oder lässt das „Hey“ weg („Mo, …“ am Satzanfang)
-  const RUF = /(?:\b(?:hey|hi|hei|ey|he|hallo|okay|ok)[,\s]*(?:mo|moh|moe|mow|moo|mö|m\.?\s?o\.?)|\b(?:heimo|heymo|haimo|hymo|heimoh|eimo|hailmo)|^\s*(?:mo|moh|moe))(?![a-zäöü])[,.!?:]?\s*(.*)$/i;
+  // Rufwort „Hey MO“ / „Hey Jarvis“ samt Verhörern – Liste und Abgleich in weckwort.js (Weckwort.erkennen)
   let hinweisKeineSprache = false;
 
   function grundModus() { return Studio.cfg.aufJarvisHoeren && SR ? 'wach' : 'aus'; }
@@ -860,11 +858,11 @@ const Jarvis = (() => {
 
   /** Zeigt kurz, was die Spracherkennung im Rufwort-Modus verstanden hat – so sieht man, ob „Hey MO“ ankommt. */
   let gehoertTimer = null;
-  function gehoertZeigen(text) {
+  function gehoertZeigen(text, treffer) {
     const el = $('#eingabeHinweis');
     if (!el || !String(text).trim()) return;
     el.hidden = false;
-    el.textContent = RUF.test(text) ? '✓ „Hey MO“ erkannt' : `Gehört: „${String(text).trim().slice(-60)}“ – zum Ansprechen „Hey MO“ sagen`;
+    el.textContent = treffer ? `✓ „Hey ${treffer.wort === 'jarvis' ? 'Jarvis' : 'MO'}“ erkannt` : `Gehört: „${String(text).trim().slice(-60)}“ – zum Ansprechen „Hey MO“ oder „Hey Jarvis“ sagen`;
     clearTimeout(gehoertTimer);
     gehoertTimer = setTimeout(() => { el.hidden = true; }, 3500);
   }
@@ -925,20 +923,31 @@ const Jarvis = (() => {
     const sr = new SR();
     sr.lang = 'de-DE';
     sr.interimResults = true;
+    sr.maxAlternatives = 4; // „Mo“ wird oft verhört – alle Alternativen auf das Rufwort prüfen
     sr.continuous = wachen; // im Rufwort-Modus durchgehend lauschen
     let endgueltig = '';
+    const zwischenTreffer = []; // Rufwort schon im Zwischenergebnis gehört (je Satz)
+    let ausgeloest = false; // pro Satz nur einmal auslösen
     sr.onresult = (e) => {
+      if (ausgeloest) return;
       let t = '';
       endgueltig = '';
       for (let i = 0; i < e.results.length; i++) { t += e.results[i][0].transcript; if (e.results[i].isFinal) endgueltig += e.results[i][0].transcript + ' '; }
       if (!wachen) { eingabe.value = t; return; }
-      gehoertZeigen(t);
-      const zwischen = RUF.exec(t);
-      if (zwischen) eingabe.value = zwischen[1];
-      const ruf = RUF.exec(endgueltig.trim());
+      // Jeden Satz mit allen Alternativen prüfen; ein Zwischen-Treffer zählt, falls der endgültige Text das Rufwort verliert
+      let ruf = null, vorschau = null;
+      for (let i = 0; i < e.results.length && !ruf; i++) {
+        const treffer = Weckwort.inAlternativen(e.results[i]);
+        if (!e.results[i].isFinal) { if (treffer) { zwischenTreffer[i] = treffer; vorschau = treffer; } }
+        else ruf = treffer || zwischenTreffer[i] || null;
+      }
+      if (!ruf && endgueltig.trim()) ruf = Weckwort.erkennen(endgueltig); // „Hey“ und „Mo“ in zwei Teilen erkannt
+      vorschau = vorschau || ruf || Weckwort.erkennen(t);
+      gehoertZeigen(t, vorschau);
+      if (vorschau) eingabe.value = vorschau.rest;
       if (ruf) {
-        const befehl = ruf[1].trim();
-        if (befehl) h.ausloesen = befehl; else h.befehl = true;
+        ausgeloest = true;
+        if (ruf.rest) h.ausloesen = ruf.rest; else h.befehl = true;
         try { sr.stop(); } catch (err) { /* egal */ }
       }
     };
@@ -978,8 +987,8 @@ const Jarvis = (() => {
         }
         h.befehl = false;
         // „Mo, …“ am Satzanfang ist im Gespräch erlaubt, wird aber nicht mitgeschickt
-        const ruf = RUF.exec(text);
-        const inhalt = ruf ? ruf[1].trim() : text;
+        const ruf = Weckwort.erkennen(text);
+        const inhalt = ruf ? ruf.rest : text;
         if (!inhalt) { h.stille = 0; setTimeout(hoerenStarten, 200); return; }
         abschicken(inhalt);
         return;
