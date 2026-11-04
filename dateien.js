@@ -6,7 +6,8 @@
 const Ablage = (() => {
   const $ = (s) => document.querySelector(s);
   const { esc, toast } = Studio;
-  const ENDUNGEN = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'txt', 'md', 'csv', 'json'];
+  const ENDUNGEN = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'txt', 'md', 'csv', 'json', 'mp4', 'm4v', 'mov', 'webm', 'mkv', 'mp3', 'm4a', 'wav', 'ogg', 'opus', 'aac'];
+  const GROSS = new Set(['mp4', 'm4v', 'mov', 'webm', 'mkv', 'mp3', 'm4a', 'wav', 'ogg', 'opus', 'aac']); // Video und Ton: eigenes Größenlimit
   const z = {
     reiter: 'notizen', filter: 'alle',
     notizen: null, notizenLaedt: false, notizenFehler: '',
@@ -68,12 +69,21 @@ const Ablage = (() => {
     } finally { z.notizenLaedt = false; neuZeichnen(); }
   }
 
+  // Laufen noch Auswertungen, die Liste alle 8 Sekunden nachladen
+  let nachfassTimer = null;
+  function nachfassen() {
+    clearTimeout(nachfassTimer);
+    if (!(z.dateien || []).some((d) => d.auswertung && ['wartet', 'laeuft'].includes(d.auswertung.status))) return;
+    nachfassTimer = setTimeout(() => { if (!document.hidden) dateienLaden(); else nachfassen(); }, 8000);
+  }
+
   async function dateienLaden() {
     if (z.dateienLaedt || !zentraleBereit()) return;
     z.dateienLaedt = true; z.dateienFehler = '';
     try {
       const r = await zentrale('GET', '/api/uploads');
-      z.dateien = r.dateien || []; z.maxMB = r.maxMB || 20; z.ordner = r.ordner || '';
+      z.dateien = r.dateien || []; z.maxMB = r.maxMB || 20; z.videoMaxMB = r.videoMaxMB || 1000; z.ordner = r.ordner || '';
+      nachfassen();
     } catch (err) {
       z.dateienFehler = netzFehler(err);
       if (!z.dateien) z.dateien = [];
@@ -121,7 +131,7 @@ const Ablage = (() => {
       xhr.open('POST', c.zentrale + '/api/uploads?name=' + encodeURIComponent(datei.name || 'foto.jpg'));
       xhr.setRequestHeader('Authorization', 'Bearer ' + c.zentraleSchluessel);
       xhr.setRequestHeader('Content-Type', datei.type || 'application/octet-stream');
-      xhr.timeout = 10 * 60 * 1000;
+      xhr.timeout = 60 * 60 * 1000; // große Videos über das Handynetz
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) onFortschritt(Math.min(99, Math.round(e.loaded / e.total * 100))); };
       xhr.onload = () => {
         let r = null;
@@ -143,17 +153,18 @@ const Ablage = (() => {
     if (z.upload && z.upload.status === 'laeuft') { toast('Bitte warten – es läuft schon ein Upload.'); return; }
     for (const datei of liste) {
       const name = datei.name || 'foto.jpg';
-      const endung = endungVon(name) || ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'application/pdf': 'pdf', 'text/plain': 'txt' })[datei.type] || '';
-      if (!ENDUNGEN.includes(endung)) { z.upload = { name, prozent: 0, status: 'fehler', text: 'Dateityp nicht erlaubt (erlaubt: PDF, JPG, PNG, TXT, MD, CSV u. a.).' }; uploadZeigen(); toast(z.upload.text, 5000); continue; }
-      if (datei.size > z.maxMB * 1024 * 1024) { z.upload = { name, prozent: 0, status: 'fehler', text: `Zu groß (${groesseText(datei.size)}, höchstens ${z.maxMB} MB).` }; uploadZeigen(); toast(z.upload.text, 5000); continue; }
+      const endung = endungVon(name) || ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'application/pdf': 'pdf', 'text/plain': 'txt', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/webm': 'webm' })[datei.type] || '';
+      const grenzeMB = GROSS.has(endung) ? (z.videoMaxMB || 1000) : (z.maxMB || 20);
+      if (!ENDUNGEN.includes(endung)) { z.upload = { name, prozent: 0, status: 'fehler', text: 'Dateityp nicht erlaubt (erlaubt: PDF, Bilder, Text, Videos MP4/MOV/WebM, Ton MP3/M4A/WAV u. a.).' }; uploadZeigen(); toast(z.upload.text, 5000); continue; }
+      if (datei.size > grenzeMB * 1024 * 1024) { z.upload = { name, prozent: 0, status: 'fehler', text: `Zu groß (${groesseText(datei.size)}, höchstens ${grenzeMB} MB).` }; uploadZeigen(); toast(z.upload.text, 5000); continue; }
       if (!datei.size) { z.upload = { name, prozent: 0, status: 'fehler', text: 'Die Datei ist leer.' }; uploadZeigen(); continue; }
       z.upload = { name, prozent: 0, status: 'laeuft', text: '' };
       uploadZeigen();
       try {
         const e = await senden(datei, (p) => { z.upload.prozent = p; uploadZeigen(); });
-        const textInfo = e.art === 'bild' ? '' : e.textStatus === 'ok' ? `Text gelesen (${Number(e.textZeichen || 0).toLocaleString('de-DE')} Zeichen).` : (e.textHinweis || '');
+        const textInfo = e.auswertung ? 'Wird jetzt ausgewertet – MO meldet sich, sobald er es kennt.' : e.textStatus === 'ok' ? `Text gelesen (${Number(e.textZeichen || 0).toLocaleString('de-DE')} Zeichen).` : (e.textHinweis || '');
         z.upload = { name, prozent: 100, status: 'ok', text: textInfo, id: e.id };
-        if (z.dateien) z.dateien = [e].concat(z.dateien.filter((d) => d.id !== e.id)); else dateienLaden();
+        if (z.dateien) { z.dateien = [e].concat(z.dateien.filter((d) => d.id !== e.id)); nachfassen(); } else dateienLaden();
         toast(`„${name}“ hochgeladen.${textInfo ? ' ' + textInfo : ''}`, 4500);
       } catch (err) {
         z.upload = { name, prozent: 0, status: 'fehler', text: netzFehler(err) };
@@ -166,7 +177,7 @@ const Ablage = (() => {
   }
 
   // Dateiauswahl (fest im HTML, damit sie Neuzeichnen übersteht)
-  for (const id of ['#dateiWahl', '#fotoWahl']) {
+  for (const id of ['#dateiWahl', '#fotoWahl', '#videoWahl']) {
     const el = $(id);
     if (el) el.addEventListener('change', () => { const f = Array.from(el.files || []); el.value = ''; hochladen(f); });
   }
@@ -220,17 +231,22 @@ const Ablage = (() => {
         <div class="upload-knoepfe">
           <label class="knopf haupt-knopf" for="dateiWahl" role="button" tabindex="0">📎 Datei hochladen</label>
           <label class="knopf" for="fotoWahl" role="button" tabindex="0">📷 Foto aufnehmen</label>
+          <label class="knopf" for="videoWahl" role="button" tabindex="0">🎥 Video aufnehmen</label>
         </div>
-        <p class="leise klein-text">PDF, Bilder (JPG, PNG) und Text (TXT, MD, CSV) bis ${z.maxMB} MB. MO liest den Text und kann damit arbeiten.</p>
+        <p class="leise klein-text">PDF, Bilder und Text bis ${z.maxMB} MB, Videos und Tonaufnahmen bis ${z.videoMaxMB || 1000} MB. MO liest den Text; Videos, Ton und Bilder werden automatisch ausgewertet (Sprache wird verschriftet, Claude sieht sich die Bilder an).</p>
         ${uploadStatusHtml()}
       </div>`;
     if (!zentraleBereit()) return h + '<p class="leer">Zum Hochladen und für die Dateiliste muss die Zentrale verbunden sein (⚙ Einstellungen).</p>';
     if (!z.dateien) { dateienLaden(); return h + '<p class="laden">Einen Moment, ich hole die Dateiliste …</p>'; }
     if (z.dateienFehler) h += `<p class="hinweis-zeile fehler">${esc(z.dateienFehler)}</p>`;
     if (!z.dateien.length) return h + '<p class="leer">Noch keine Dateien hochgeladen.</p>';
-    const symbol = { pdf: '📄', bild: '🖼', text: '📝' };
+    const symbol = { pdf: '📄', bild: '🖼', text: '📝', video: '🎬', ton: '🎙' };
     h += '<ul class="liste datei-liste">' + z.dateien.map((d) => {
-      const status = d.art === 'bild' ? '<span class="chip">Bild</span>'
+      const a = d.auswertung;
+      const status = a && ['wartet', 'laeuft'].includes(a.status) ? `<span class="chip warn">${esc(a.stand || 'wird ausgewertet')}</span>`
+        : a && a.status === 'fehler' ? `<span class="chip rot" title="${esc(a.fehler || '')}">Auswertung fehlgeschlagen</span>`
+        : a && a.status === 'fertig' ? '<span class="chip ok">ausgewertet</span>'
+        : d.art === 'bild' ? '<span class="chip">Bild</span>'
         : d.textStatus === 'ok' ? `<span class="chip ok">Text gelesen</span>` : `<span class="chip warn" title="${esc(d.textHinweis || '')}">kein Text</span>`;
       return `<li>
         <div class="datei-kopf"><span class="datei-symbol" aria-hidden="true">${symbol[d.art] || '📎'}</span>

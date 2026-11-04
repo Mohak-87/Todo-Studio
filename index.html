@@ -72,7 +72,7 @@
         <button type="button" data-typ="idee">Idee</button>
       </div>
       <div class="eingabe-zeile">
-        <label class="mikro datei-knopf" id="knopfDatei" for="dateiWahl" role="button" tabindex="0" title="Datei hochladen (PDF, Bild, Text) – MO kann damit arbeiten" aria-label="Datei hochladen">📎</label>
+        <label class="mikro datei-knopf" id="knopfDatei" for="dateiWahl" role="button" tabindex="0" title="Datei hochladen (PDF, Bild, Text, Video, Ton) – MO kann damit arbeiten" aria-label="Datei hochladen">📎</label>
         <button type="button" class="mikro" id="knopfMikro" aria-label="Sprechen">🎙</button>
         <textarea id="eingabeText" rows="1" enterkeyhint="send" placeholder="Womit kann ich dienen?"></textarea>
         <button type="submit" class="senden" aria-label="Senden">➤</button>
@@ -97,8 +97,9 @@
 
   <!-- Dateiauswahl für den Upload (Datei bzw. Kamera am Handy); die sichtbaren Knöpfe sind <label for=…> -->
   <input type="file" id="dateiWahl" class="unsichtbar" multiple
-    accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.txt,.md,.csv,.json,application/pdf,image/*,text/plain,text/markdown,text/csv">
+    accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.txt,.md,.csv,.json,application/pdf,image/*,text/plain,text/markdown,text/csv,.mp4,.m4v,.mov,.webm,.mkv,.mp3,.m4a,.wav,.ogg,.opus,.aac,video/*,audio/*">
   <input type="file" id="fotoWahl" class="unsichtbar" accept="image/*" capture="environment">
+  <input type="file" id="videoWahl" class="unsichtbar" accept="video/*" capture="environment">
   <div class="ablage-ziel" aria-hidden="true"><span>📎 Datei loslassen – MO bekommt sie</span></div>
 
   <div class="agent-karte glas" id="agentKarte" hidden></div>
