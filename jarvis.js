@@ -112,6 +112,7 @@ const Jarvis = (() => {
             if (window.Wolke && Wolke.setzeAktive) Wolke.setzeAktive(j.zustand ? j.zustand.aktiveAgenten : {});
             continue;
           }
+          if (e.art === 'veroeffentlichen') { j.umbauSchritt = e.text; umbauLaden(); }
           if (e.art === 'chat' && e.nachricht) nachrichtEmpfangen(e.nachricht);
           else auffrischen = true;
           if (e.art === 'agent' && e.agent === 'jarvis') {
@@ -192,6 +193,12 @@ const Jarvis = (() => {
     }
     if (s.typ === 'sitzung') {
       return `<li><b>${esc(s.titel)}</b> – ${esc(s.ziel)}<br><span class="leise">Ordner ${esc(s.ordner)} · ${s.rechte === 'lesen' ? 'nur lesen' : 'Dateien bearbeiten (Befehle nur aus fester Liste, kein Push)'} · höchstens ${s.hoechstMin} Min.</span></li>`;
+    }
+    if (s.typ === 'veroeffentlichen') {
+      return `<li><b>Umbau veröffentlichen: ${s.commits.length} Commit(s) von mo → live</b>${s.trotzdem ? ' <span class="chip">trotz laufender Sitzung</span>' : ''}
+        <br><span class="leise">${s.commits.slice(0, 10).map(esc).join('<br>')}${s.commits.length > 10 ? '<br>…' : ''}</span>
+        <details><summary class="leise">${s.dateien.length} geänderte Datei(en)</summary><span class="leise">${s.dateien.map(esc).join('<br>')}</span></details>
+        <span class="leise">Stand ${esc(s.ziel.slice(0, 7))} · Rücksprungpunkt ${esc((s.live || '').slice(0, 7))}</span></li>`;
     }
     if (s.schluessel === 'mails.entwurf' && s.daten) {
       return `<li><b>Mail-Entwurf speichern – wird nicht versendet</b><br><span class="leise">An:</span> ${esc(s.daten.an)}<br><span class="leise">Betreff:</span> ${esc(s.daten.betreff || '(ohne Betreff)')}${s.daten.antwortAufId ? ' <span class="leise">(Antwort im selben Verlauf)</span>' : ''}<p class="text-block">${esc(s.daten.text)}</p></li>`;
@@ -432,7 +439,98 @@ const Jarvis = (() => {
       <h3>Zentrale neu starten</h3>
       <p class="leise">Prüft zuerst alle Programmdateien der Zentrale. Nur wenn alle fehlerfrei sind, wird der Stand gesichert und die Zentrale neu gestartet; die App verbindet sich danach von selbst wieder.</p>
       <div class="knopf-reihe"><button class="knopf" data-j="neustart">Zentrale neu starten</button></div>
-    </div>`;
+    </div>
+    ${umbauHtml()}`;
+  }
+
+  // ---------- Umbau veröffentlichen (Zweig mo → live, ohne Laptop) ----------
+  const UMBAU_ERGEBNIS = { erfolgreich: ['ok', 'erfolgreich'], abgebrochen: ['', 'abgebrochen'], zurueckgerollt: ['warn', 'zurückgerollt'], fehlgeschlagen: ['warn', 'fehlgeschlagen'], abgelehnt: ['', 'abgelehnt'], laeuft: ['', 'läuft'] };
+
+  async function umbauLaden() {
+    if (j.umbauLaedt || !j.verbunden) return;
+    j.umbauLaedt = true;
+    try { j.umbau = await zentrale('GET', '/api/veroeffentlichen'); }
+    catch (err) { j.umbau = { fehler: err.message, commits: [], dateien: [], letzte: [] }; }
+    finally { j.umbauLaedt = false; j.umbauZeit = Date.now(); }
+    const el = document.getElementById('umbauKarte');
+    if (el) el.outerHTML = umbauHtml();
+  }
+
+  function umbauHtml() {
+    const u = j.umbau;
+    if (!u || Date.now() - (j.umbauZeit || 0) > 30000 || (u.laeuft && Date.now() - (j.umbauZeit || 0) > 4000)) setTimeout(umbauLaden, 0);
+    let h = '<div class="karte" id="umbauKarte"><h3>Umbau veröffentlichen</h3>';
+    if (!u) return h + '<p class="laden">Prüfe den Zweig mo …</p></div>';
+    h += '<p class="leise">Übernimmt neue Commits vom Zweig mo (MOs Bau-Sitzungen am todo-studio) direkt auf dem Server: Sicherung, Code- und Testprüfung, Neustart mit Gesundheitsprüfung – sonst automatisch zurück –, dann zu GitHub und ins Web-Studio. Kein Laptop nötig.</p>';
+    if (u.fehler) h += `<p class="fehlertext">${esc(u.fehler)}</p>`;
+    if (u.eingerichtet === false) h += '<p class="hilfe">Der Server-Teil ist noch nicht eingerichtet. Einmalig per SSH: <code>sudo bash /opt/jarvis/quelle/server/einrichten.sh</code> (siehe JARVIS-ANLEITUNG).</p>';
+    if (u.laeuft) {
+      const s = u.status && !u.status.fertig && u.status.schritte ? u.status.schritte.slice(-1)[0] : null;
+      h += `<p><span class="chip gruen">läuft</span> ${esc((s && s.text) || j.umbauSchritt || 'Auftrag ist abgelegt …')}</p><p class="leise">Die Zentrale startet dabei neu und ist kurz nicht erreichbar.</p>`;
+    } else if (u.live) {
+      if (!u.neu) h += `<p><span class="chip ok">aktuell</span> Auf mo liegt nichts Neues. Live: ${esc(u.live.slice(0, 7))}</p>`;
+      else {
+        h += `<p><b>${u.neu} neue(r) Commit(s) auf mo</b> <span class="leise">· live ${esc(u.live.slice(0, 7))} → ${esc(u.ziel.slice(0, 7))}</span></p>
+          <ul class="leise" style="margin:4px 0 6px;padding-left:18px">${u.commits.slice(0, 8).map((c) => `<li>${esc(c.kurz)} ${esc(c.titel)}</li>`).join('')}${u.neu > 8 ? '<li>…</li>' : ''}</ul>
+          <details><summary class="leise">${u.dateien.length} geänderte Datei(en)</summary><div class="leise" style="font:12px/1.45 ui-monospace,Consolas,monospace">${u.dateien.map((d) => esc(d.art + ' ' + d.datei)).join('<br>')}</div></details>`;
+        if (u.konflikt) h += `<p class="fehlertext">Konflikt mit dem Live-Stand in ${esc(u.konfliktDateien.join(', ') || 'mehreren Dateien')} – so nicht veröffentlichbar. Live bleibt unverändert.</p>`;
+      }
+    }
+    const kann = u.eingerichtet && !u.laeuft && u.neu > 0 && !u.konflikt && !u.fehler;
+    h += `<div class="knopf-reihe"><button class="knopf ${kann ? 'haupt-knopf' : ''}" data-j="veroeffentlichen"${kann ? '' : ' disabled'}>Umbau veröffentlichen</button><button class="knopf klein" data-j="umbau-pruefen">Neu prüfen</button></div>`;
+    if ((u.letzte || []).length) {
+      h += '<p class="abschnitt">Letzte Veröffentlichungen</p><ul class="liste">' + u.letzte.map((e) => {
+        const [art, text] = UMBAU_ERGEBNIS[e.ergebnis] || ['', e.ergebnis || '?'];
+        const zeit = new Date(e.zeit || e.start || Date.now()).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        return `<li style="flex-direction:column;align-items:flex-start;gap:2px"><span><span class="chip ${art}">${esc(text)}</span> <span class="leise">${esc(zeit)} · ${(e.commits || []).length} Commit(s)${e.neu ? ' · ' + esc(String(e.neu).slice(0, 7)) : ''}</span></span>
+          <span class="leise">${esc(String(e.meldung || '').slice(0, 300))}</span></li>`;
+      }).join('') + '</ul>';
+    }
+    return h + '</div>';
+  }
+
+  /**
+   * Freigabe-PIN abfragen und damit genau diesen Commit unterschreiben (im Gerät, die PIN verlässt es nie).
+   * Schlüssel = PBKDF2-SHA256(PIN, Salz, Runden); Unterschrift = HMAC-SHA256(Schlüssel, "veroeffentlichen:<commit>").
+   */
+  async function pinUnterschrift(ziel) {
+    if (!j.umbau || !j.umbau.pin) { try { j.umbau = await zentrale('GET', '/api/veroeffentlichen'); j.umbauZeit = Date.now(); } catch (e) { /* unten */ } }
+    const p = j.umbau && j.umbau.pin;
+    if (!p) { toast('Es ist noch keine Freigabe-PIN eingerichtet (einmalig per SSH: sudo jarvis-mo-pin).', 8000); return ''; }
+    if (!(window.crypto && crypto.subtle)) { toast('Dieses Gerät kann hier nicht unterschreiben (nur über https möglich).', 8000); return ''; }
+    const r = await Studio.dialogOeffnen(`<h2>Freigabe-PIN</h2>
+      <p class="leise">Stand ${esc(String(ziel).slice(0, 7))} live schalten. Die PIN bleibt auf diesem Gerät; nur eine Unterschrift für genau diesen Stand geht an den Server.</p>
+      <input type="password" name="pin" autocomplete="off" required minlength="6" placeholder="PIN" style="width:100%">
+      <div class="knopf-reihe" style="flex-direction:row-reverse;justify-content:flex-start"><button class="knopf haupt-knopf" value="ja">Freigeben</button>
+      <button class="knopf" value="nein" formnovalidate>Abbrechen</button></div>`);
+    const pin = String((r.daten && r.daten.pin) || '').normalize('NFC').trim();
+    if (r.wert !== 'ja' || !pin) return '';
+    const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
+    const salz = new Uint8Array(p.salz.match(/../g).map((x) => parseInt(x, 16)));
+    const basis = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: salz, iterations: p.runden }, basis, 256);
+    const k = await crypto.subtle.importKey('raw', bits, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return hex(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode('veroeffentlichen:' + ziel)));
+  }
+
+  async function umbauVeroeffentlichen() {
+    const u = j.umbau;
+    if (!j.verbunden) return toast('Die Zentrale ist nicht erreichbar.');
+    if (!u || !u.neu) return;
+    const liste = u.commits.slice(0, 8).map((c) => '• ' + esc(c.kurz + ' ' + c.titel)).join('<br>');
+    if (!(await Studio.bestaetigen('Umbau veröffentlichen?', `<p>${u.neu} neue(r) Commit(s) auf mo:<br><span class="leise">${liste}${u.neu > 8 ? '<br>…' : ''}</span></p>
+      <p class="leise">${u.dateien.length} geänderte Datei(en). Vorher wird gesichert und geprüft. Die Zentrale startet neu und ist kurz nicht erreichbar; startet sie nicht sauber, geht es automatisch zum jetzigen Stand zurück. Danach wird zu GitHub und ins Web-Studio veröffentlicht.</p>`, 'Veröffentlichen', true))) return;
+    try {
+      const signatur = await pinUnterschrift(u.ziel);
+      if (!signatur) return;
+      let r = await zentrale('POST', '/api/veroeffentlichen/start', { ziel: u.ziel, signatur });
+      if (!r.gestartet && r.sitzungen) {
+        if (!(await Studio.bestaetigen('Sitzungen laufen noch', `${r.sitzungen.anzahl} Claude-Sitzung(en) laufen gerade${r.sitzungen.todoStudio ? ' (auch am todo-studio)' : ''} und werden durch den Neustart abgebrochen. Trotzdem veröffentlichen?`, 'Trotzdem', true))) return;
+        r = await zentrale('POST', '/api/veroeffentlichen/start', { ziel: u.ziel, trotzdem: true, signatur });
+      }
+      if (r.gestartet) toast('Veröffentlichung läuft – Fortschritt hier, das Ergebnis kommt als Meldung und Push.', 8000);
+    } catch (err) { toast(err.message, 8000); }
+    umbauLaden();
   }
 
   async function zentraleNeustarten() {
@@ -516,8 +614,12 @@ const Jarvis = (() => {
     const v = vorschlag(id);
     if (!v) return toast('Vorschlag nicht gefunden.');
     if (!j.verbunden) return toast('Die Zentrale ist nicht erreichbar – Freigaben sind gerade nicht möglich.');
+    // Veröffentlichen: erst mit der Freigabe-PIN unterschreiben
+    let signatur = '';
+    const vf = entscheidung === 'ja' && (v.schritte || []).find((s) => s.typ === 'veroeffentlichen');
+    if (vf) { signatur = await pinUnterschrift(vf.ziel); if (!signatur) return; }
     try {
-      await zentrale('POST', '/api/freigabe', { id, pruefsumme: v.pruefsumme, entscheidung });
+      await zentrale('POST', '/api/freigabe', { id, pruefsumme: v.pruefsumme, entscheidung, signatur });
       zustandAuffrischen();
     } catch (err) { toast(err.message, 6000); }
   }
@@ -573,6 +675,8 @@ const Jarvis = (() => {
     if (was === 'agent-zeigen') { Studio.oeffne('jarvis'); if (window.Wolke && Wolke.fokus) Wolke.fokus(id); }
     if (was === 'kanal-kopieren') { const k = j.zustand && j.zustand.ntfy && j.zustand.ntfy.kanal; if (k) navigator.clipboard.writeText(k).then(() => toast('Kanalname kopiert.'), () => toast(k)); }
     if (was === 'neustart') zentraleNeustarten();
+    if (was === 'veroeffentlichen') umbauVeroeffentlichen();
+    if (was === 'umbau-pruefen') { j.umbauZeit = 0; umbauLaden(); }
     if (was === 'ntfy') {
       zentrale('POST', '/api/einstellung', { ntfy: id === 'an' }).then((r) => { j.zustand.ntfy = r.ntfy; Studio.zeichnen(); toast(id === 'an' ? 'Eingeschaltet – eine Testmeldung ist unterwegs.' : 'Ausgeschaltet.'); }).catch((err) => toast(err.message));
     }

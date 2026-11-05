@@ -239,6 +239,8 @@ const DemoZentrale = (() => {
       const id = new URLSearchParams(pfad.split('?')[1]).get('id');
       return kopie(z.sitzungen.find((x) => x.id === id));
     }
+    if (pfad === '/api/veroeffentlichen') return { eingerichtet: true, laeuft: false, sitzungen: { anzahl: 0, todoStudio: 0 }, live: 'd'.repeat(40), ziel: 'd'.repeat(40), neu: 0, commits: [], dateien: [], konflikt: false, konfliktDateien: [], fehler: '', letzte: [] };
+    if (pfad === '/api/veroeffentlichen/start') throw new Error('In der Demo wird nichts veröffentlicht.');
     throw new Error('Demo: unbekannter Pfad ' + pfad);
   }
 
