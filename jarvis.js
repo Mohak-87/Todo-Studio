@@ -16,6 +16,7 @@ const Jarvis = (() => {
     ['mails', 'Mail-Agent', 'Liest ungelesene Mails. Nur lesen – sendet nie.'],
     ['ideen', 'Ideen-Agent', 'Verwaltet den Ideenspeicher.'],
     ['planer', 'Planer-Agent', 'Tagesplan und Briefing.'],
+    ['budget', 'Budget-Agent', 'Trägt genannte Zahlungen in den Budgetplaner ein.'],
     ['impuls', 'Impuls-Agent', 'Meldet sich von selbst mit Hinweisen und Vorschlägen.'],
     ['freigabe', 'Freigabe-Wächter', 'Lässt nur ausdrücklich Freigegebenes ausführen.'],
     ['waechter', 'Sitzungs-Wächter', 'Überwacht Claude-Sitzungen.'],
