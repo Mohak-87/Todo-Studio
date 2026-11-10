@@ -148,9 +148,10 @@ const Jarvis = (() => {
       Wolke.globus(m.orte);
       if (innerWidth <= 860) chatUmschalten(false); // Handy: die Kugel braucht den Platz, die Antwort bleibt im Chat
     }
-    if (m.von === 'jarvis') sprechen(m.sprechen || (m.text.length < 160 ? m.text : ''));
+    // „sprechen“ ist reiner Text; fehlt er, wird eine kurze Antwort ohne Markdown-Zeichen vorgelesen
+    if (m.von === 'jarvis') { const klar = ChatFormat.zuSprechtext(m.text); sprechen(m.sprechen || (klar.length < 160 ? klar : '')); }
     if (m.von === 'jarvis' && !document.body.classList.contains('chat-offen')) { j.ungelesen = (j.ungelesen || 0) + 1; ungelesenZeigen(); }
-    else if (m.von === 'nutzer') eingabe.value = '';
+    else if (m.von === 'nutzer' && !m.upload) eingabe.value = ''; // eine Bild-Vorschau löscht nicht, was gerade getippt wird
     chatZeichnen();
   }
 
@@ -212,9 +213,15 @@ const Jarvis = (() => {
   function vorschlagHtml(v) {
     if (!v) return '';
     const aktiv = v.status === 'offen' || v.status === 'zurueckgestellt';
-    return `<div class="freigabe ${aktiv ? '' : 'erledigt'}" data-vorschlag="${esc(v.id)}">
-      <p class="oberzeile">Freigabe · ${STATUS_TEXT[v.status] || esc(v.status)}</p>
-      <h3>${esc(v.titel)}</h3>
+    const kid = 'v-' + v.id;
+    // Offene Freigaben sind aufgeklappt (Knöpfe sofort erreichbar), erledigte nur noch eine kompakte Zeile
+    const offen = karten.offen.has(kid) || (aktiv && !karten.zu.has(kid));
+    const kurz = v.begruendung || v.schritte.map((s) => s.titel || s.name || s.beschreibung || '').filter(Boolean).join(' · ');
+    return `<details class="freigabe ${aktiv ? '' : 'erledigt'}" data-vorschlag="${esc(v.id)}" data-karte="${esc(kid)}"${offen ? ' open' : ''}>
+      <summary class="karte-kopf"><span class="karte-symbol">⚑</span><span class="karte-titel"><small>Freigabe</small><b>${esc(v.titel)}</b></span>
+        <span class="karte-status ton-${aktiv ? 'warn' : v.status === 'freigegeben' ? 'ok' : ''}">${STATUS_TEXT[v.status] || esc(v.status)}</span>
+        ${kurz ? `<span class="karte-kurz">${esc(String(kurz).slice(0, 170))}${String(kurz).length > 170 ? ' …' : ''}</span>` : ''}</summary>
+      <div class="karte-inhalt">
       ${v.begruendung ? `<p class="leise" style="margin:0">${esc(v.begruendung)}</p>` : ''}
       ${v.ablaufName ? `<p class="leise" style="margin:6px 0 0">Ablauf aus dem Katalog: <b>${esc(v.ablaufName)}</b></p>` : ''}
       ${v.schritte.some((s) => s.typ === 'agent') && v.schritte.filter((s) => s.typ === 'agent').length > 1 ? `<p class="leise" style="margin:6px 0 0">Reihenfolge: ${v.ablauf === 'kette' ? 'nacheinander, jeder baut auf dem vorherigen auf' : 'parallel'}</p>` : ''}
@@ -224,7 +231,7 @@ const Jarvis = (() => {
       ${aktiv ? `<div class="knopf-reihe" style="margin-top:8px">
         ${v.status === 'zurueckgestellt' ? `<button class="knopf klein" data-j="verwerfen" data-id="${esc(v.id)}">Verwerfen</button>` : `<button class="knopf klein" data-j="ablehnen" data-id="${esc(v.id)}">Ablehnen</button>`}
         <button class="knopf klein haupt-knopf" data-j="freigeben" data-id="${esc(v.id)}">Freigeben</button></div>` : ''}
-    </div>`;
+    </div></details>`;
   }
 
   /** Knappe Statuszeile je Aktion unter MOs Antwort (z. B. „✓ Termin angelegt“, „✗ Fehler: …“). */
@@ -235,6 +242,141 @@ const Jarvis = (() => {
       `<span style="display:block"${a.status === 'fehler' ? ' class="fehlertext"' : ''}>${AKTION_ZEICHEN[a.status] || '·'} ${esc(a.text)}</span>`).join('')}</span>`;
   }
 
+  // ---------- Chat-Darstellung: Markdown, Karten, Bilder ----------
+  const karten = { offen: new Set(), zu: new Set() };   // vom Nutzer auf- bzw. zugeklappte Karten (überstehen das Neuzeichnen)
+  const mdCache = new Map();                            // Nachrichten-ID → { text, html } (Markdown nur einmal umwandeln)
+  const bildUrls = new Map();                           // „quelle:id“ → Objekt-URL (Bilder der Zentrale brauchen den Schlüssel)
+  const bildLaedt = new Set();
+  const bildFehlt = new Set();
+  const kaputteBilder = new Set();                      // externe Bild-Adressen, die nicht geladen werden konnten
+
+  function mdHtml(m) {
+    const c = mdCache.get(m.id);
+    if (c && c.text === m.text) return c.html;
+    const html = ChatFormat.markdownZuHtml(m.text);
+    mdCache.set(m.id, { text: m.text, html });
+    if (mdCache.size > 300) mdCache.delete(mdCache.keys().next().value);
+    return html;
+  }
+
+  function bilderHtml(m) {
+    if (!Array.isArray(m.bilder) || !m.bilder.length) return '';
+    return `<div class="chat-bilder">${m.bilder.map((b) => {
+      const key = b.quelle + ':' + b.id;
+      if (bildFehlt.has(key)) return `<span class="md-bild-fehler">Bild „${esc(b.titel || '')}“ ist nicht mehr verfügbar.</span>`;
+      const url = bildUrls.get(key);
+      return `<figure class="chat-bild"><span class="md-bild"><img class="md-bild-img" data-bild="${esc(key)}" alt="${esc(b.titel || 'Bild')}"${url ? ` src="${url}" data-gross="${url}"` : ''}></span>${b.quelle === 'mo' && (b.titel || b.ki) ? `<figcaption>${esc(b.titel || '')}${b.ki ? `${b.titel ? ' · ' : ''}KI-Bild` : ''}</figcaption>` : ''}</figure>`;
+    }).join('')}</div>`;
+  }
+
+  async function bildHolen(key) {
+    const [quelle, id] = key.split(':');
+    const c = Studio.cfg;
+    if (c.zentrale === 'demo') return typeof DemoZentrale !== 'undefined' && DemoZentrale.bild ? DemoZentrale.bild(quelle, id) : null;
+    const res = await fetch(`${c.zentrale}/api/bild?quelle=${encodeURIComponent(quelle)}&id=${encodeURIComponent(id)}`,
+      { headers: { Authorization: 'Bearer ' + c.zentraleSchluessel }, signal: AbortSignal.timeout(30000) });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.blob();
+  }
+
+  /** Nach dem Zeichnen: Bilder der Zentrale nachladen, kaputte externe Bilder durch ihren Link ersetzen. */
+  function bilderNachbereiten() {
+    verlaufEl.querySelectorAll('img[data-bild]:not([src])').forEach((img) => {
+      const key = img.dataset.bild;
+      if (bildLaedt.has(key) || bildUrls.has(key) || bildFehlt.has(key)) return;
+      bildLaedt.add(key);
+      bildHolen(key).then((blob) => {
+        if (!blob) { bildFehlt.add(key); return; }
+        bildUrls.set(key, URL.createObjectURL(blob));
+      }).catch(() => { /* beim nächsten Zeichnen erneut */ }).finally(() => { bildLaedt.delete(key); chatZeichnen(); });
+    });
+    verlaufEl.querySelectorAll('img.md-bild-img:not([data-bild])').forEach((img) => { if (kaputteBilder.has(img.getAttribute('src'))) bildErsetzen(img); });
+  }
+
+  function bildErsetzen(img) {
+    const span = img.closest('.md-bild');
+    if (!span) return;
+    const link = img.dataset.link || img.getAttribute('src');
+    const davor = span.previousElementSibling;
+    if (davor && davor.tagName === 'A' && davor.getAttribute('href') === link) { span.remove(); return; } // der Link steht schon da
+    const a = document.createElement('a');
+    a.className = 'md-bild-fehler'; a.href = link; a.target = '_blank'; a.rel = 'noopener noreferrer nofollow';
+    a.textContent = '🖼 Bild nicht ladbar – Link öffnen: ' + (img.alt && img.alt !== 'Bild' ? img.alt : link);
+    span.replaceWith(a);
+  }
+  // Fehler-Ereignisse von Bildern steigen nicht auf – darum in der Einfangphase abhören
+  verlaufEl.addEventListener('error', (ev) => {
+    const img = ev.target;
+    if (!img || img.tagName !== 'IMG' || !img.classList.contains('md-bild-img')) return;
+    if (img.dataset.bild) { const key = img.dataset.bild; const u = bildUrls.get(key); if (u) URL.revokeObjectURL(u); bildUrls.delete(key); bildFehlt.add(key); chatZeichnen(); return; }
+    kaputteBilder.add(img.getAttribute('src'));
+    bildErsetzen(img);
+  }, true);
+  // Auf-/Zuklappen der Karten merken
+  verlaufEl.addEventListener('toggle', (ev) => {
+    const d = ev.target;
+    if (!d || !d.dataset || !d.dataset.karte) return;
+    if (d.open) { karten.offen.add(d.dataset.karte); karten.zu.delete(d.dataset.karte); } else { karten.zu.add(d.dataset.karte); karten.offen.delete(d.dataset.karte); }
+  }, true);
+
+  // ---------- Bild groß (Antippen) ----------
+  const gross = document.createElement('div');
+  gross.className = 'bild-gross'; gross.hidden = true;
+  gross.setAttribute('role', 'dialog'); gross.setAttribute('aria-modal', 'true'); gross.setAttribute('aria-label', 'Bild vergrößert');
+  gross.innerHTML = '<img alt=""><div class="bild-gross-leiste"><a class="knopf klein" target="_blank" rel="noopener noreferrer nofollow">Original öffnen</a><button type="button" class="knopf klein" data-zu>Schließen ✕</button></div>';
+  document.body.appendChild(gross);
+  function grossZeigen(img) {
+    const src = img.dataset.gross || img.getAttribute('src');
+    if (!src) return;
+    gross.querySelector('img').src = src;
+    gross.querySelector('img').alt = img.alt || '';
+    const a = gross.querySelector('a');
+    const extern = /^https?:/i.test(img.dataset.link || '');
+    a.hidden = !extern; if (extern) a.href = img.dataset.link;
+    gross.hidden = false;
+    gross.querySelector('[data-zu]').focus();
+  }
+  function grossZu() { gross.hidden = true; gross.querySelector('img').removeAttribute('src'); }
+  gross.addEventListener('click', (ev) => { if (!ev.target.closest('a')) grossZu(); });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !gross.hidden) grossZu(); });
+  verlaufEl.addEventListener('click', (ev) => {
+    const img = ev.target.closest('img.md-bild-img');
+    if (img && img.getAttribute('src')) { ev.preventDefault(); grossZeigen(img); }
+  });
+
+  function kopieren(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise((ok, nein) => {
+      const t = document.createElement('textarea');
+      t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select();
+      try { document.execCommand('copy') ? ok() : nein(new Error('nicht möglich')); } catch (e) { nein(e); } finally { t.remove(); }
+    });
+  }
+
+  /** Eine Nachricht als HTML: Nutzer als Text, MO als Markdown – technische Meldungen und lange Berichte als aufklappbare Karte. */
+  function nachrichtHtml(m) {
+    const zeit = new Date(m.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    const hinweis = m.imBriefkasten ? '<span class="briefkasten-hinweis">⏳ im Briefkasten – MO bearbeitet das, sobald die Zentrale läuft</span>'
+      : m.nachgereicht ? `<span class="briefkasten-hinweis">✉ unterwegs geschrieben um ${esc(new Date(m.nachgereicht).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))}</span>` : '';
+    const extras = `${m.prompt ? `<div class="prompt-block"><div class="prompt-kopf"><span>Prompt</span><button class="knopf klein" data-j="prompt-kopieren" data-id="${esc(m.id)}">Kopieren</button></div><pre>${esc(m.prompt)}</pre></div>` : ''}${Array.isArray(m.orte) && m.orte.length ? `<button class="knopf klein erde-knopf" data-j="erde-zeigen" data-id="${esc(m.id)}">🌍 Auf der Erde zeigen</button>` : ''}${aktionenHtml(m)}<span class="zeit">${zeit}</span>`;
+    if (m.von !== 'jarvis') {
+      const text = m.upload ? '' : `<div class="nutzer-text">${esc(m.text)}</div>`;
+      return `<div class="nachricht ${esc(m.von)}${m.imBriefkasten ? ' wartend' : ''}${m.upload ? ' upload' : ''}">${hinweis}${text}${bilderHtml(m)}${extras}</div>`;
+    }
+    const k = ChatFormat.karteFuer(m);
+    if (k) {
+      const kid = 'm-' + m.id;
+      const offen = karten.offen.has(kid) || (k.offen && !karten.zu.has(kid));
+      return `<details class="nachricht jarvis karte ton-${esc(k.ton)}" data-karte="${esc(kid)}"${offen ? ' open' : ''}>
+        <summary class="karte-kopf"><span class="karte-symbol" aria-hidden="true">${esc(k.symbol)}</span><span class="karte-titel"><small>${esc(k.name)}</small><b>${esc(k.titel)}</b></span>
+          <span class="karte-status ton-${esc(k.ton)}">${esc(k.status)}</span>${k.kurz ? `<span class="karte-kurz">${esc(k.kurz)}</span>` : ''}</summary>
+        <div class="karte-inhalt"><div class="md-inhalt">${mdHtml(m)}</div>${bilderHtml(m)}${m.sitzungId ? `<button class="knopf klein" data-j="details" data-id="${esc(m.sitzungId)}">Protokoll</button>` : ''}</div>${extras}</details>`;
+    }
+    return `<div class="nachricht jarvis md">${hinweis}<div class="md-inhalt">${mdHtml(m)}</div>${bilderHtml(m)}${extras}</div>`;
+  }
+
   function chatZeichnen() {
     const server = (j.zustand && j.zustand.chat) || [];
     briefkastenAbgleichen();
@@ -243,15 +385,13 @@ const Jarvis = (() => {
     const unten = verlaufEl.scrollHeight - verlaufEl.scrollTop - verlaufEl.clientHeight < 80;
     let h = '';
     for (const m of alle) {
-      const zeit = new Date(m.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-      const hinweis = m.imBriefkasten ? '<span class="briefkasten-hinweis">⏳ im Briefkasten – MO bearbeitet das, sobald die Zentrale läuft</span>'
-        : m.nachgereicht ? `<span class="briefkasten-hinweis">✉ unterwegs geschrieben um ${esc(new Date(m.nachgereicht).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))}</span>` : '';
-      h += `<div class="nachricht ${m.von}${m.imBriefkasten ? ' wartend' : ''}">${hinweis}${esc(m.text)}${m.prompt ? `<div class="prompt-block"><div class="prompt-kopf"><span>Prompt</span><button class="knopf klein" data-j="prompt-kopieren" data-id="${esc(m.id)}">Kopieren</button></div><pre>${esc(m.prompt)}</pre></div>` : ''}${Array.isArray(m.orte) && m.orte.length ? `<button class="knopf klein erde-knopf" data-j="erde-zeigen" data-id="${esc(m.id)}">🌍 Auf der Erde zeigen</button>` : ''}${aktionenHtml(m)}<span class="zeit">${zeit}</span></div>`;
+      h += nachrichtHtml(m);
       if (m.vorschlagId) h += vorschlagHtml(vorschlag(m.vorschlagId));
     }
-    if (j.teil) h += `<div class="nachricht jarvis live">${esc(j.teil)}<span class="cursor"></span></div>`;
+    if (j.teil) h += `<div class="nachricht jarvis md live"><div class="md-inhalt">${ChatFormat.markdownZuHtml(j.teil)}</div><span class="cursor"></span></div>`;
     else if (j.zustand && j.zustand.jarvis && j.zustand.jarvis.status === 'denkt') h += '<div class="denkt nachricht jarvis"><i></i><i></i><i></i></div>';
     verlaufEl.innerHTML = h || '<p class="leise" style="text-align:center;margin:auto">Sprechen oder schreiben Sie mir. Ich kümmere mich um den Rest.</p>';
+    bilderNachbereiten();
     if (unten || j.ersteRunde) verlaufEl.scrollTop = verlaufEl.scrollHeight;
     j.ersteRunde = false;
   }
@@ -654,6 +794,10 @@ const Jarvis = (() => {
     if (was === 'verwerfen') entscheiden(id, 'verwerfen');
     if (was === 'stoppen') sitzungStoppen(id);
     if (was === 'details') sitzungDetails(id);
+    if (was === 'code-kopieren') {
+      const code = el.closest('.md-code') && el.closest('.md-code').querySelector('code');
+      if (code) kopieren(code.textContent).then(() => { el.textContent = 'Kopiert ✓'; setTimeout(() => { el.textContent = 'Kopieren'; }, 1600); }, () => toast('Kopieren nicht möglich – bitte markieren.'));
+    }
     if (was === 'prompt-kopieren') {
       const m = ((j.zustand && j.zustand.chat) || []).find((x) => x.id === id);
       if (m && m.prompt) navigator.clipboard.writeText(m.prompt).then(() => toast('Prompt kopiert.'), () => toast('Kopieren nicht möglich – bitte markieren.'));

@@ -49,6 +49,22 @@ const DemoZentrale = (() => {
     });
   }
 
+  // Bilder der Demo (hochgeladene Dateien und von MO gezeichnete SVG-Grafiken) – nur im Speicher dieses Browsers
+  const demoBilder = new Map();
+  const DEMO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 440"><rect width="800" height="440" fill="#14161f"/>' +
+    '<g font-family="system-ui, sans-serif" fill="#f3f5f8"><text x="40" y="56" font-size="26" font-weight="600">Ablauf: Idee bis Veröffentlichung</text>' +
+    '<text x="40" y="86" font-size="16" fill="#b9bfca">Beispielskizze (Demo) – so zeichnet MO Diagramme als SVG</text></g>' +
+    '<defs><marker id="pfeil" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#a78bfa"/></marker></defs>' +
+    [['Idee', 40], ['Prompt', 230], ['Bau', 420], ['Live', 610]].map(([t, x], i) =>
+      `<rect x="${x}" y="170" width="150" height="90" rx="16" fill="${i === 3 ? '#1f3b2c' : '#232637'}" stroke="${i === 3 ? '#4ade80' : '#a78bfa'}" stroke-width="2"/>` +
+      `<text x="${x + 75}" y="223" font-family="system-ui, sans-serif" font-size="22" text-anchor="middle" fill="#f3f5f8">${t}</text>` +
+      (i < 3 ? `<line x1="${x + 152}" y1="215" x2="${x + 186}" y2="215" stroke="#a78bfa" stroke-width="3" marker-end="url(#pfeil)"/>` : '')).join('') +
+    '<text x="400" y="330" font-family="system-ui, sans-serif" font-size="17" text-anchor="middle" fill="#b9bfca">Jeder Schritt wartet auf Ihre Freigabe, bevor der nächste beginnt.</text></svg>';
+  function bild(quelle, id) {
+    const b = demoBilder.get(quelle + ':' + id);
+    return Promise.resolve(b || null);
+  }
+
   function ereignis(art, daten = {}) { ereignisse.push({ nr: ++nr, zeit: jetzt(), art, ...daten }); }
   async function tippen(text) { // wie die echte Zentrale: Antwort erscheint schon beim Schreiben
     for (let i = 12; i < text.length; i += 12) { ereignis('teil', { text: text.slice(0, i) }); await new Promise((r) => setTimeout(r, 90)); }
@@ -97,10 +113,10 @@ const DemoZentrale = (() => {
     setTimeout(() => {
       if (sitz.status !== 'laeuft') return;
       sitz.status = 'fertig'; sitz.ende = jetzt(); sitz.live.plan.forEach((p) => { p.status = 'fertig'; }); sitz.live.jetzt = '';
-      sitz.ergebnis = 'Ich habe 42 Links geprüft. Zwei verweisen ins Leere: /impressum-alt und /preise-2024. Geändert habe ich nichts – Vorschlag: auf /impressum und /preise umleiten.';
+      sitz.ergebnis = 'Ich habe **42 Links** geprüft. Zwei verweisen ins Leere; geändert habe ich nichts.\n\n| Seite | Link | Status |\n|---|---|---|\n| kontakt.html | /impressum-alt | 404 |\n| index.html | /preise-2024 | 404 |\n\n**Vorschlag:** auf `/impressum` und `/preise` umleiten, z. B.:\n\n```bash\nRedirect 301 /impressum-alt /impressum\nRedirect 301 /preise-2024 /preise\n```\n\n(Demo-Ergebnis)';
       ereignis('sitzung', { sitzungId: sitz.id });
       agent('waechter', 'bereit', '');
-      chat('jarvis', `Sitzung „${sitz.titel}“ ist abgeschlossen.\n${sitz.ergebnis}`, { sprechen: `Die Sitzung ${sitz.titel} ist abgeschlossen. Zwei defekte Links.` });
+      chat('jarvis', `Sitzung „${sitz.titel}“ ist abgeschlossen.\n\n${sitz.ergebnis}`, { sprechen: `Die Sitzung ${sitz.titel} ist abgeschlossen. Zwei defekte Links.`, sitzungId: sitz.id, karte: { art: 'sitzung', titel: sitz.titel, status: 'fertig', ton: 'ok' } });
     }, 1800 * (schritte.length + 1));
   }
 
@@ -117,6 +133,22 @@ const DemoZentrale = (() => {
       const prompt = '<role>\nDu bist eine erfahrene Web-Entwicklerin für schlanke, lokale Apps.\n</role>\n<context>\nDer Nutzer möchte eine einfache Notiz-App, die nur im Browser läuft.\n</context>\n<task>\n1. Baue eine Seite zum Anlegen, Bearbeiten und Löschen von Notizen.\n2. Speichere die Notizen im Browser (localStorage).\n</task>\n<constraints>\n- Keine kostenpflichtigen Dienste, kein Server.\n</constraints>\n<output_format>\nEin Ordner mit index.html, style.css und app.js sowie eine kurze Startanleitung.\n</output_format>\n<edge_cases>\n- Leere Notizen werden nicht gespeichert.\n</edge_cases>';
       chat('jarvis', 'Ampel: Grün – Einsatzbereit, klar und vollständig.\n\nZielordner: C:\\Users\\…\\Downloads\\notiz-app – die neue Sitzung legt erst mit Ihrem Bau-Befehl los.\n\n(Demo: In der echten Zentrale folgt auf „baue die App“ eine Nachfrage, dann baut eine neue Claude-Sitzung.)',
         { sprechen: 'Ihr Prompt liegt vor. Ampel Grün.', prompt });
+      return;
+    }
+    if (/zeichne|skizze|diagramm|schaubild|grafik|illustration|bild (von|vom|zu|für)/i.test(text)) {
+      const id = 'b' + (nr + 1);
+      demoBilder.set('mo:' + id, new Blob([DEMO_SVG], { type: 'image/svg+xml' }));
+      const antwort = 'Hier ist eine Skizze des Ablaufs – **vier Schritte**, jeder mit Ihrer Freigabe. Tippen Sie das Bild an, um es zu vergrößern.\n\n(Demo: Die echte Zentrale zeichnet das Bild passend zu Ihrer Bitte.)';
+      await tippen(antwort);
+      chat('jarvis', antwort, { sprechen: 'Hier ist eine Skizze des Ablaufs. Die Einzelheiten sehen Sie im Chat.', bilder: [{ quelle: 'mo', id, titel: 'Ablauf: Idee bis Veröffentlichung' }] });
+      agent('jarvis', 'bereit', '');
+      return;
+    }
+    if (/markdown|formatier|tabelle|beispielantwort/i.test(text)) {
+      const antwort = 'Gern – so sehen formatierte Antworten aus:\n\n**Fettdruck** für das Wichtigste, *Kursiv* für Betonung und `code` für Befehle im Satz.\n\n- Aufzählungen für lose Punkte\n- mit kurzen Einträgen\n  - auch verschachtelt\n\n1. Schritt eins\n2. Schritt zwei\n\n| Gerät | Ansicht | Schrift |\n|---|---|---:|\n| Laptop | Chat rechts | 15 px |\n| iPad | Chat-Panel | 16 px |\n| Handy | Chat unten | 16 px |\n\n```js\n// Code mit Hervorhebung und Kopierknopf\nconst gruss = (name) => `Guten Tag, ${name}!`;\nconsole.log(gruss(\'Sir\'));\n```\n\nLinks sind anklickbar: [Markdown-Grundlagen](https://commonmark.org/help/). Ein Bild-Link, der nicht lädt, wird zum Link: ![Beispielbild](https://example.org/beispiel-bild.png)\n\n(Demo)';
+      await tippen(antwort);
+      chat('jarvis', antwort, { sprechen: 'Gern. So sehen formatierte Antworten aus. Die Beispiele stehen im Chat.' });
+      agent('jarvis', 'bereit', '');
       return;
     }
     if (/welt|nachrichten|lagebericht|wo liegt/i.test(text)) {
@@ -207,7 +239,10 @@ const DemoZentrale = (() => {
     if (pfad === '/api/uploads' && methode === 'GET') return kopie({ ordner: '/demo/uploads', maxMB: 20, dateien: demoDateien });
     if (pfad === '/api/uploads') {
       const d = { id: 'u' + Date.now(), name: body.name, pfad: '/demo/uploads/' + body.name, groesse: body.groesse || 1, typ: body.typ || '', art: /^image\//.test(body.typ) ? 'bild' : /pdf/.test(body.typ) ? 'pdf' : 'text', zeit: new Date().toISOString(), textStatus: 'ok', textZeichen: 1200, textHinweis: '', auszug: 'Demo: Hier stünde der Anfang des ausgelesenen Textes.' };
-      if (d.art === 'bild') { d.textStatus = 'bild'; d.auszug = ''; d.textHinweis = 'Bild – kein Text.'; }
+      if (d.art === 'bild') {
+        d.textStatus = 'bild'; d.auszug = ''; d.textHinweis = 'Bild – kein Text.';
+        if (body.datei) { demoBilder.set('upload:' + d.id, body.datei); chat('nutzer', `Bild hochgeladen: „${d.name}“`, { upload: true, uploadId: d.id, bilder: [{ quelle: 'upload', id: d.id, titel: d.name }] }); }
+      }
       demoDateien.unshift(d); return kopie(d);
     }
     if (pfad === '/api/uploads/loeschen') { const k = demoDateien.findIndex((x) => x.id === body.id); if (k >= 0) demoDateien.splice(k, 1); return { geloescht: body.id }; }
@@ -245,6 +280,7 @@ const DemoZentrale = (() => {
   }
 
   return {
+    bild,
     aufruf(methode, pfad, body) {
       if (pfad.startsWith('/api/ereignisse')) {
         // Wie die echte Zentrale: sofort antworten, sobald es etwas Neues gibt (höchstens 2 s warten)

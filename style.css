@@ -554,3 +554,126 @@ body.datei-ziehen .ablage-ziel { display: grid; }
   .eingabe-zeile { gap: 6px; }
   .datei-knopf { width: 42px; }
 }
+
+/* ================= Chat-Darstellung wie bei Claude: Markdown, Karten, Bilder ================= */
+/* Nie waagerecht scrollen: Nachrichten dürfen schrumpfen, nur Code und Tabellen scrollen in ihrem Kasten */
+.verlauf { overflow-x: hidden; overscroll-behavior: contain; }
+.verlauf > * { min-width: 0; max-width: 100%; flex-shrink: 0; } /* Karten mit overflow:hidden würden sonst auf 0 zusammengedrückt */
+.nachricht { font-size: .95rem; line-height: 1.6; }
+.nachricht.nutzer { max-width: 85%; }
+.nachricht .nutzer-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* MO: volle Breite, ohne Sprechblase, mit violetter Kante – eigene Nachrichten bleiben Blasen rechts */
+.nachricht.jarvis.md { align-self: stretch; max-width: 100%; white-space: normal; background: rgba(255, 255, 255, .035);
+  border: 1px solid transparent; border-left: 3px solid rgba(167, 139, 250, .55); border-radius: 4px 14px 14px 4px; padding: 10px 14px 8px; }
+.nachricht.jarvis.md.live { border-left-color: var(--jarvis); }
+.md-inhalt { max-width: 68ch; overflow-wrap: break-word; word-break: normal; color: var(--text); }
+.md-inhalt > :first-child { margin-top: 0; }
+.md-inhalt > :last-child { margin-bottom: 0; }
+.md-inhalt p { margin: 0 0 .75em; }
+.md-inhalt strong { font-weight: 650; color: #fff; }
+.md-inhalt em { font-style: italic; }
+.md-inhalt del { opacity: .7; }
+.md-inhalt a { color: #c4b5fd; text-decoration: underline; text-decoration-color: rgba(196, 181, 253, .45); text-underline-offset: 2px; overflow-wrap: anywhere; }
+.md-inhalt a:hover { text-decoration-color: currentColor; }
+.md-inhalt .md-ueber { margin: 1.1em 0 .45em; line-height: 1.3; font-weight: 650; color: #fff; }
+.md-inhalt h3.md-ueber { font-size: 1.12em; }
+.md-inhalt h4.md-ueber { font-size: 1.04em; }
+.md-inhalt h5.md-ueber, .md-inhalt h6.md-ueber { font-size: .95em; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+.md-inhalt ul, .md-inhalt ol { margin: 0 0 .75em; padding-left: 1.4em; }
+.md-inhalt li { margin: .2em 0; padding-left: .15em; }
+.md-inhalt li > ul, .md-inhalt li > ol { margin: .2em 0 .2em; }
+.md-inhalt li::marker { color: var(--text-3); }
+.md-inhalt ol > li::marker { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.md-inhalt .md-haken { color: var(--text-3); }
+.md-inhalt .md-haken.an { color: var(--ok); }
+.md-inhalt blockquote { margin: 0 0 .75em; padding: .1em 0 .1em .9em; border-left: 3px solid var(--kante-hell); color: var(--text-2); }
+.md-inhalt hr { border: 0; border-top: 1px solid var(--kante); margin: 1em 0; }
+.md-inhalt code { font: .86em/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(255, 255, 255, .08); border: 1px solid var(--kante); border-radius: 6px; padding: .08em .35em; overflow-wrap: anywhere; }
+/* Codeblöcke: eigener Kasten, scrollt waagerecht in sich, Kopierknopf */
+.md-code { margin: 0 0 .85em; border: 1px solid var(--kante); border-radius: 10px; background: #0d0f15; overflow: hidden; max-width: 100%; }
+.md-code-kopf { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--kante); background: rgba(255, 255, 255, .03); font-size: .72rem; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; }
+.md-kopieren { border: 1px solid var(--kante); background: transparent; color: var(--text-2); border-radius: 7px; padding: 4px 10px; font-size: .75rem; min-height: 30px; text-transform: none; letter-spacing: 0; }
+.md-kopieren:hover { color: var(--text); border-color: var(--kante-hell); }
+.md-code pre { margin: 0; padding: 10px 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; max-height: 420px; overflow-y: auto; scrollbar-width: thin; }
+.md-code code { display: block; width: max-content; min-width: 100%; white-space: pre; background: none; border: 0; padding: 0; font: .82rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #e6e9ef; tab-size: 2; overflow-wrap: normal; }
+.hl-k { color: #c4a7ff; }   /* Schlüsselwort */
+.hl-s { color: #a5e3a1; }   /* Zeichenkette */
+.hl-c { color: #7d8594; font-style: italic; } /* Kommentar */
+.hl-n { color: #f9c784; }   /* Zahl */
+.hl-l { color: #7cc7ff; }   /* Wert/Option */
+.hl-f { color: #8fd3ff; }   /* Funktion */
+.hl-p { color: #ffb3c1; }   /* Eigenschaft/Schlüssel */
+.hl-v { color: #f9c784; }   /* Variable */
+.hl-t { color: #ff9eb0; }   /* HTML-Tag */
+.hl-a { color: #f9c784; }   /* HTML-Attribut */
+/* Tabellen: sauber, scrollen nur in ihrem Kasten */
+.md-tabelle { margin: 0 0 .85em; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--kante); border-radius: 10px; scrollbar-width: thin; }
+.md-tabelle table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: .86rem; line-height: 1.45; }
+.md-tabelle th, .md-tabelle td { padding: 7px 11px; border-bottom: 1px solid var(--kante); text-align: left; vertical-align: top; max-width: 34ch; overflow-wrap: break-word; }
+.md-tabelle th { background: rgba(255, 255, 255, .05); font-weight: 600; color: #fff; white-space: nowrap; }
+.md-tabelle tbody tr:nth-child(even) td { background: rgba(255, 255, 255, .02); }
+.md-tabelle tbody tr:last-child td { border-bottom: 0; }
+/* Bilder: Vorschau, antippen = groß */
+.md-bild { display: block; margin: .4em 0 .6em; }
+.md-bild-img { display: block; max-width: 100%; max-height: 320px; width: auto; height: auto; border-radius: 10px; border: 1px solid var(--kante); background: rgba(255, 255, 255, .04); cursor: zoom-in; object-fit: contain; }
+.md-bild-img:not([src]) { width: 160px; height: 110px; animation: bildLaedt 1.2s ease-in-out infinite; }
+@keyframes bildLaedt { 50% { background: rgba(255, 255, 255, .09); } }
+.md-bild-fehler { display: inline-block; margin: .3em 0; font-size: .85rem; color: var(--text-2); overflow-wrap: anywhere; }
+.chat-bilder { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.chat-bild { margin: 0; max-width: 100%; }
+.chat-bild .md-bild { margin: 0; }
+.chat-bild figcaption { margin-top: 4px; font-size: .75rem; color: var(--text-3); }
+.nachricht.jarvis .chat-bild { flex: 1 1 100%; }
+.nachricht.jarvis .chat-bild .md-bild-img { max-height: 420px; background: #fff; }
+.nachricht.upload { padding: 6px; }
+.nachricht.upload .md-bild-img { max-height: 220px; }
+.bild-gross { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom)); background: rgba(3, 4, 8, .92); touch-action: pinch-zoom; }
+.bild-gross[hidden] { display: none; }
+.bild-gross img { max-width: 100%; max-height: calc(100% - 56px); object-fit: contain; border-radius: 8px; background: #fff; }
+.bild-gross-leiste { display: flex; gap: 8px; }
+.bild-gross-leiste a[hidden] { display: none; }
+/* Karten: technische Meldungen, lange Ergebnisse, Freigaben – kompakt, aufklappbar */
+.nachricht.karte { align-self: stretch; max-width: 100%; white-space: normal; padding: 0; background: rgba(255, 255, 255, .04); border: 1px solid var(--kante); border-radius: 14px; overflow: hidden; }
+.karte-kopf { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; padding: 10px 12px; cursor: pointer; list-style: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.karte-kopf::-webkit-details-marker { display: none; }
+.karte-kopf::after { content: '▸'; grid-column: 3; grid-row: 2; justify-self: end; color: var(--text-3); font-size: .8rem; transition: transform .2s; }
+details[open] > .karte-kopf::after { transform: rotate(90deg); }
+.karte-kopf:focus-visible { outline: 2px solid var(--kante-hell); outline-offset: -2px; border-radius: 12px; }
+.karte-symbol { grid-row: 1 / span 2; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: rgba(255, 255, 255, .06); color: var(--text-2); font-size: .95rem; }
+.karte-titel { min-width: 0; display: flex; flex-direction: column; }
+.karte-titel small { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-3); }
+.karte-titel b { font-weight: 600; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.karte-status { justify-self: end; font-size: .72rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--kante); color: var(--text-2); white-space: nowrap; }
+.karte-status.ton-ok { color: var(--ok); border-color: rgba(74, 222, 128, .4); }
+.karte-status.ton-warn { color: var(--warn); border-color: rgba(251, 191, 36, .45); }
+.karte-status.ton-fehler { color: var(--fehler); border-color: rgba(251, 113, 133, .45); }
+.karte-status.ton-aktiv { color: var(--jarvis); border-color: rgba(167, 139, 250, .45); }
+.karte-kurz { grid-column: 2; font-size: .82rem; line-height: 1.45; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+details[open] > .karte-kopf .karte-kurz { display: none; }
+.karte-inhalt { padding: 2px 14px 10px; border-top: 1px solid var(--kante); padding-top: 10px; }
+.nachricht.karte > .zeit, .nachricht.karte > .prompt-block, .nachricht.karte > .erde-knopf, .nachricht.karte > span.leise { margin-left: 14px; margin-right: 14px; }
+.nachricht.karte > .zeit { margin-bottom: 8px; }
+.nachricht.karte.ton-fehler { border-color: rgba(251, 113, 133, .35); }
+.nachricht.karte.ton-warn { border-color: rgba(251, 191, 36, .35); }
+.karte-inhalt > .knopf { margin-top: 4px; }
+/* Freigabe als Karte (gleicher Kopf) */
+.freigabe { padding: 0; overflow: hidden; }
+.freigabe > .karte-inhalt { padding: 10px 14px 12px; }
+.freigabe .karte-symbol { color: var(--warn); background: rgba(251, 191, 36, .12); }
+.freigabe.erledigt .karte-symbol { color: var(--text-3); background: rgba(255, 255, 255, .06); }
+
+/* Handy & iPad: größere Schrift, mehr Luft, Tippflächen ≥ 30 px; 16 px in der Eingabe verhindert das Zoomen in iOS */
+@media (max-width: 1180px) and (pointer: coarse), (max-width: 860px) {
+  .nachricht { font-size: 1rem; line-height: 1.62; }
+  .verlauf { padding: 4px 10px 14px; gap: 12px; }
+  .eingabe-zeile textarea { font-size: 16px; }
+  .md-code code { font-size: .8rem; }
+  .karte-kopf { padding: 12px; }
+  .md-kopieren { min-height: 34px; padding: 6px 12px; }
+}
+@media (max-width: 860px) {
+  .nachricht.jarvis.md { padding: 10px 12px 8px; }
+  .md-inhalt { max-width: none; }
+  .md-tabelle th, .md-tabelle td { padding: 6px 9px; max-width: 26ch; }
+}

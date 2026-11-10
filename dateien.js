@@ -123,7 +123,7 @@ const Ablage = (() => {
     if (c.zentrale === 'demo') {
       return new Promise((ok) => {
         let p = 0;
-        const t = setInterval(() => { p = Math.min(100, p + 25); onFortschritt(p); if (p >= 100) { clearInterval(t); ok(DemoZentrale.aufruf('POST', '/api/uploads', { name: datei.name, groesse: datei.size, typ: datei.type })); } }, 200);
+        const t = setInterval(() => { p = Math.min(100, p + 25); onFortschritt(p); if (p >= 100) { clearInterval(t); ok(DemoZentrale.aufruf('POST', '/api/uploads', { name: datei.name, groesse: datei.size, typ: datei.type, datei })); } }, 200);
       });
     }
     return new Promise((ok, nein) => {
