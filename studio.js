@@ -42,46 +42,86 @@ const Studio = (() => {
     const p = $(id);
     p.classList.toggle('an', zustand === 'an');
     p.classList.toggle('aus', zustand === 'aus');
+    p.classList.toggle('prueft', zustand === 'prueft');
     if (titel) p.title = titel;
   }
 
   // ---------- Google-Skript ----------
-  async function api(action, daten = {}) {
-    if (!cfg.url) throw new Error('Noch nicht mit Google verbunden – bitte in den Einstellungen (⚙) eintragen.');
+  /** Aufruf des Google-Skripts. opt.timeout (ms) bricht ab; der Schlüssel geht wie bisher nur an cfg.url. */
+  async function api(action, daten = {}, opt = {}) {
+    if (!cfg.url) { const e = new Error('Noch nicht mit Google verbunden – bitte in den Einstellungen (⚙) eintragen.'); e.art = 'fehlt'; throw e; }
     if (cfg.url === 'demo') return DemoStudio.aufruf(action, daten);
-    const res = await fetch(cfg.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({}, daten, { action, key: cfg.schluessel }))
-    });
-    let j;
-    try { j = await res.json(); } catch (e) { throw new Error('Keine gültige Antwort vom Google-Skript. Stimmt die Web-App-URL?'); }
-    if (!j.ok) throw new Error(j.fehler || 'Unbekannter Fehler');
-    return j.daten;
+    try {
+      return await GoogleDiagnose.skriptAufruf({ url: cfg.url, schluessel: cfg.schluessel, action, daten, timeoutMs: opt.timeout || 0 });
+    } catch (err) {
+      if (err.art === 'netz' && navigator.onLine === false) { err.art = 'offline'; err.message = 'Sie sind offline.'; }
+      throw err;
+    }
   }
 
-  async function heuteLaden(still) {
-    if (!cfg.url) { pille('#pilleGoogle', 'aus', 'Google-Skript nicht eingetragen'); return; }
+  // Zustand der Google-Anzeige: '' (unbekannt) | 'prueft' | 'an' | 'aus'
+  const ZULETZT_OK = 'studio.googleZuletztOk';
+  const google = { zustand: '', fehler: null, zuletztOk: 0, zuletztGeprueft: 0 };
+  try { google.zuletztOk = Number(localStorage.getItem(ZULETZT_OK)) || 0; } catch (e) { /* privater Modus */ }
+
+  function googleAnzeige(zustand, titel, fehler) {
+    google.zustand = zustand;
+    if (zustand !== 'prueft') google.zuletztGeprueft = Date.now();
+    if (zustand === 'an') {
+      google.fehler = null; google.zuletztOk = Date.now();
+      try { localStorage.setItem(ZULETZT_OK, String(google.zuletztOk)); } catch (e) { /* egal */ }
+    } else if (zustand === 'aus') google.fehler = fehler || null;
+    pille('#pilleGoogle', zustand, (titel || 'Google-Skript') + ' – antippen für Details');
+    document.dispatchEvent(new CustomEvent('studio:daten'));
+  }
+
+  // Nur ein Ladevorgang gleichzeitig; wer währenddessen ruft, bekommt danach einen frischen Durchlauf.
+  let heuteLauf = null, heuteNochmal = false;
+  function heuteLaden(still) {
+    if (heuteLauf) { heuteNochmal = true; return heuteLauf; }
+    heuteLauf = (async () => {
+      do { heuteNochmal = false; await heuteLadenEinmal(still); still = true; } while (heuteNochmal);
+    })().finally(() => { heuteLauf = null; });
+    return heuteLauf;
+  }
+
+  async function heuteLadenEinmal(still) {
+    if (!cfg.url) { googleAnzeige('aus', 'Google-Skript nicht eingetragen', { art: 'fehlt' }); return; }
     z.laedt = true;
     $('#knopfNeuLaden').classList.add('drehen');
     if (!still && !z.heute) zeichnen();
+    // Grün bleibt grün, bis ein Fehler auftritt; sonst neutral „prüft …“ statt rot.
+    if (google.zustand !== 'an') googleAnzeige('prueft', 'Google-Skript wird geprüft …');
     try {
-      z.heute = await api('heute', { arbeitsbeginn: cfg.beginn, arbeitsende: cfg.ende });
-      pille('#pilleGoogle', 'an', 'Google-Skript verbunden');
+      z.heute = await GoogleDiagnose.mitWiederholung(
+        () => api('heute', { arbeitsbeginn: cfg.beginn, arbeitsende: cfg.ende }, { timeout: 40000 }),
+        {
+          sollWiederholen: (err) => navigator.onLine !== false && GoogleDiagnose.sollWiederholen(err),
+          beiFehler: (err, nr) => googleAnzeige('prueft', `Google: ${GoogleDiagnose.ART_KURZ[err.art] || 'Fehler'} – neuer Versuch ${nr} von ${GoogleDiagnose.ABSTAENDE.length} …`)
+        });
+      googleAnzeige('an', 'Google-Skript verbunden');
       banner(z.heute.probleme && z.heute.probleme.length ? 'Teilweise nicht geladen: ' + z.heute.probleme.join(' · ') : '');
       try { localStorage.setItem(STAND, JSON.stringify({ zeit: Date.now(), daten: z.heute })); } catch (e) { /* egal */ }
     } catch (err) {
-      pille('#pilleGoogle', 'aus', 'Google-Skript nicht erreichbar');
+      googleAnzeige('aus', 'Google: ' + (GoogleDiagnose.ART_KURZ[err.art] || 'nicht erreichbar'), { art: err.art || 'skript', status: err.status || 0, meldung: err.message, versuche: err.versuche || 1 });
       let alt = null;
       try { alt = JSON.parse(localStorage.getItem(STAND) || 'null'); } catch (e) { alt = null; }
       if (alt && !z.heute) z.heute = alt.daten;
       banner((navigator.onLine ? 'Google-Skript: ' + err.message : 'Sie sind offline.') +
-        (alt ? ' Angezeigt wird der Stand von ' + new Date(alt.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr.' : ''));
+        (alt ? ' Angezeigt wird der Stand von ' + new Date(alt.zeit).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr.' : '') +
+        ' Details: oben auf „Google“ tippen.');
     } finally {
       z.laedt = false;
       $('#knopfNeuLaden').classList.remove('drehen');
       zeichnen();
     }
+  }
+
+  /** Neu prüfen, wenn die App wieder sichtbar wird oder das Netz zurück ist – nicht öfter als nötig. */
+  function googleNeuPruefen(grund) {
+    if (!cfg.url || heuteLauf) return;
+    if (grund === 'sichtbar' && google.zustand === 'an' && Date.now() - google.zuletztGeprueft < 60000) return;
+    heuteLaden(true);
   }
 
   // ---------- Schublade & Ansichten ----------
@@ -467,11 +507,130 @@ const Studio = (() => {
     if (window.Jarvis) Jarvis.rufwortAnwenden();
     einstellungenSpeichern();
     z.heute = null; z.ideen = null; z.termine = null;
+    google.zustand = ''; // neue Einstellungen: Anzeige neutral, bis die Prüfung durch ist
     if (url) {
-      try { await api('ping'); toast('Google-Skript verbunden.'); } catch (err) { toast('Google-Skript: ' + err.message, 7000); }
+      googleAnzeige('prueft', 'Google-Skript wird geprüft …');
+      try { await api('ping', {}, { timeout: 20000 }); toast('Google-Skript verbunden.'); } catch (err) { toast('Google-Skript: ' + err.message + ' – Details: oben auf „Google“ tippen.', 7000); }
       heuteLaden();
-    }
+    } else googleAnzeige('aus', 'Google-Skript nicht eingetragen', { art: 'fehlt' });
     if (window.Jarvis) Jarvis.neuVerbinden();
+  }
+
+  // ---------- Google-Diagnose (Tipp auf die Google-Anzeige) ----------
+  function istAppModus() {
+    return !!(navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches));
+  }
+
+  function schrittHtml(s) {
+    const klasse = s.ok === true ? 'ok' : s.ok === false ? 'fehler' : s.ok === 'warn' ? 'warn' : s.ok === 'laeuft' ? 'laeuft' : 'neutral';
+    const symbol = { ok: '✓', fehler: '✕', warn: '!', laeuft: '', neutral: '–' }[klasse];
+    return `<li class="gd-schritt ${klasse}"><span class="gd-symbol" aria-hidden="true">${symbol}</span>
+      <span class="gd-text"><b>${esc(s.titel)}</b><span>${esc(s.text)}</span></span>
+      <span class="unsichtbar">${{ ok: 'in Ordnung', fehler: 'Fehler', warn: 'Hinweis', laeuft: 'wird geprüft', neutral: '' }[klasse]}</span></li>`;
+  }
+
+  /** Alle Prüfschritte; zeigt Zwischenstände über melde(ergebnis). Nichts davon enthält einen Schlüssel. */
+  async function googleDiagnoseLaufen(melde) {
+    const k = GoogleDiagnose.schluesselPruefen(cfg);
+    const e = { k, schritte: k.schritte.slice(), skript: null, zentrale: null, laeuft: true };
+    const online = navigator.onLine !== false;
+    e.schritte.push({ id: 'online', ok: online, titel: 'Internet', text: online ? 'Dieses Gerät ist online.' : 'Dieses Gerät ist offline. Sobald es wieder Netz hat, prüft das Studio von selbst neu.' });
+    e.skript = { id: 'skript', ok: 'laeuft', titel: 'Antwort des Google-Skripts', text: 'prüft …' };
+    melde(e);
+
+    if (cfg.url === 'demo') {
+      try { await DemoStudio.aufruf('ping', {}); e.skript = { id: 'skript', ok: true, titel: 'Antwort des Google-Skripts', text: 'Demo-Daten antworten.' }; } catch (err) { e.skript.ok = false; e.skript.text = err.message; }
+    } else if (!cfg.url || !GoogleDiagnose.URL_MUSTER.test(cfg.url)) {
+      e.skript = { id: 'skript', ok: null, titel: 'Antwort des Google-Skripts', text: 'Nicht geprüft – zuerst eine gültige Web-App-URL eintragen.' };
+    } else if (!online) {
+      e.skript = { id: 'skript', ok: false, titel: 'Antwort des Google-Skripts', text: GoogleDiagnose.artText('offline') };
+    } else {
+      const t0 = Date.now();
+      try {
+        await api('ping', {}, { timeout: 15000 });
+        e.skript = { id: 'skript', ok: true, titel: 'Antwort des Google-Skripts', text: `Antwortet – ${((Date.now() - t0) / 1000).toFixed(1).replace('.', ',')} s.` };
+      } catch (err) {
+        e.skript = { id: 'skript', ok: false, art: err.art, titel: 'Antwort des Google-Skripts · ' + (GoogleDiagnose.ART_KURZ[err.art] || 'Fehler'), text: GoogleDiagnose.artText(err.art, err.status, err.message) };
+      }
+    }
+    // Erfolgreiche Prüfung macht die Anzeige sofort grün und holt die Daten nach
+    if (e.skript.ok === true && google.zustand !== 'an') { googleAnzeige('an', 'Google-Skript verbunden'); heuteLaden(true); }
+    else if (e.skript.ok === true) googleAnzeige('an', 'Google-Skript verbunden');
+    else if (e.skript.ok === false && google.zustand === 'an') heuteLaden(true); // Anzeige entscheidet die Prüfung mit Wiederholungen
+
+    const zg = GoogleDiagnose.zentraleGoogle(window.Jarvis ? Jarvis.zustand : null);
+    if (zg) e.zentrale = { id: 'zentrale', ok: zg.ok, titel: 'Zentrale erreicht Google', text: zg.text };
+    else if (cfg.zentrale) e.zentrale = { id: 'zentrale', ok: null, titel: 'Zentrale erreicht Google', text: 'Nicht prüfbar – die Zentrale ist von diesem Gerät aus gerade nicht verbunden.' };
+    e.laeuft = false;
+    melde(e);
+    return e;
+  }
+
+  function googleDiagnoseHtml(e, frageTauschen) {
+    const alle = e.schritte.concat([e.skript], e.zentrale ? [e.zentrale] : []);
+    let ton, status;
+    if (e.laeuft) { ton = 'aktiv'; status = 'prüft …'; }
+    else if (e.skript.ok === true && !e.k.vertauscht) { ton = 'ok'; status = 'verbunden'; }
+    else if (e.k.vertauscht) { ton = 'fehler'; status = 'Schlüssel vertauscht?'; }
+    else if (e.skript.ok === true) { ton = 'warn'; status = 'verbunden, mit Hinweis'; }
+    else { ton = 'fehler'; status = e.skript.art ? GoogleDiagnose.ART_KURZ[e.skript.art] : 'nicht verbunden'; }
+
+    let h = `<div class="gd-kopf"><span class="karte-symbol">G</span>
+      <span class="karte-titel"><small>Diagnose</small><b>Google-Verbindung</b></span>
+      <span class="karte-status ton-${ton}">${esc(status)}</span></div>`;
+    if (e.k.vertauscht && !e.laeuft) {
+      h += `<div class="gd-hinweis" role="alert"><b>Schlüssel vermutlich vertauscht</b>
+        <span>Der Google-Schlüssel hat ${GoogleDiagnose.LAENGE_GOOGLE} Zeichen, der Kopplungsschlüssel der Zentrale ${GoogleDiagnose.LAENGE_KOPPLUNG}. Auf diesem Gerät stehen sie offenbar im jeweils anderen Feld.</span>
+        ${frageTauschen
+          ? `<span class="gd-frage">Inhalte von „Studio-Schlüssel“ und „Kopplungsschlüssel der Zentrale“ jetzt tauschen? Danach prüft das Studio sofort neu.</span>
+             <span class="knopf-reihe"><button type="button" class="knopf klein haupt-knopf" data-gd="tauschen-ja">Ja, tauschen</button><button type="button" class="knopf klein" data-gd="tauschen-nein">Abbrechen</button></span>`
+          : '<span class="knopf-reihe"><button type="button" class="knopf klein haupt-knopf" data-gd="tauschen">⇄ Felder tauschen</button></span>'}
+      </div>`;
+    }
+    h += `<ul class="gd-liste">${alle.map(schrittHtml).join('')}</ul>`;
+    const fehlerVorher = google.fehler && google.fehler.versuche > 1 ? ` · Letzter Fehler nach ${google.fehler.versuche} Versuchen: ${esc(GoogleDiagnose.ART_KURZ[google.fehler.art] || google.fehler.art)}` : '';
+    h += `<p class="gd-info">Letzte erfolgreiche Prüfung: <b>${esc(GoogleDiagnose.zeitText(google.zuletztOk))}</b>${fehlerVorher}</p>`;
+    h += `<p class="gd-info">${istAppModus() ? 'Geöffnet als App vom Home-Bildschirm.' : 'Geöffnet im Browser.'} App und Browser (z. B. Safari) speichern Einstellungen und Schlüssel getrennt – was hier geprüft wird, gilt nur für diese Ansicht auf diesem Gerät.</p>`;
+    h += `<div class="knopf-reihe" style="flex-direction:row-reverse;justify-content:flex-start">
+      <button type="button" class="knopf haupt-knopf" data-gd="neu" ${e.laeuft ? 'disabled' : ''}>⟳ Erneut prüfen</button>
+      <button class="knopf" value="einstellungen" formnovalidate>⚙ Einstellungen</button>
+      <button class="knopf" value="zu" formnovalidate>Schließen</button></div>`;
+    return h;
+  }
+
+  let diagnoseOffen = false;
+  async function googleDiagnose() {
+    if (diagnoseOffen || dlg.open) return;
+    diagnoseOffen = true;
+    let letzte = null, frage = false, lauf = 0;
+    const malen = () => { if (diagnoseOffen && letzte) dlgForm.innerHTML = '<div class="gd">' + googleDiagnoseHtml(letzte, frage) + '</div>'; };
+    const starten = () => { const nr = ++lauf; frage = false; googleDiagnoseLaufen((e) => { if (nr === lauf) { letzte = e; malen(); } }); };
+    const klick = (ev) => {
+      const b = ev.target.closest('button[data-gd]');
+      if (!b) return;
+      const was = b.dataset.gd;
+      if (was === 'neu') starten();
+      else if (was === 'tauschen') { frage = true; malen(); }
+      else if (was === 'tauschen-nein') { frage = false; malen(); }
+      else if (was === 'tauschen-ja') {
+        Object.assign(cfg, GoogleDiagnose.felderGetauscht(cfg));
+        einstellungenSpeichern();
+        toast('Schlüssel getauscht und gespeichert.');
+        google.zustand = ''; z.heute = null; z.ideen = null; z.termine = null;
+        heuteLaden(true);
+        if (window.Jarvis) Jarvis.neuVerbinden();
+        starten();
+      }
+    };
+    dlgForm.addEventListener('click', klick);
+    const warten = dialogOeffnen('<div class="gd"></div>');
+    dlg.classList.add('gd-dialog');
+    starten();
+    const r = await warten;
+    diagnoseOffen = false; lauf++;
+    dlgForm.removeEventListener('click', klick);
+    dlg.classList.remove('gd-dialog');
+    if (r.wert === 'einstellungen') einstellungenDialog(false);
   }
 
   // ---------- Aktionen ----------
@@ -570,13 +729,19 @@ const Studio = (() => {
   $('#knopfSchliessen').addEventListener('click', () => oeffne('jarvis'));
   $('#knopfNeuLaden').addEventListener('click', () => { z.termine = null; z.ideen = null; heuteLaden(); if (window.Jarvis) Jarvis.neuVerbinden(); });
   $('#knopfEinstellungen').addEventListener('click', () => einstellungenDialog(false));
+  $('#pilleGoogle').addEventListener('click', () => googleDiagnose());
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !dlg.open && z.ansicht !== 'jarvis') oeffne('jarvis'); });
 
   setInterval(() => { if (document.visibilityState === 'visible' && cfg.url) heuteLaden(true); }, 5 * 60 * 1000);
+  // Kurze Aussetzer sollen keine rote Anzeige hinterlassen: bei Rückkehr in die App und wenn das Netz wieder da ist neu prüfen
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') googleNeuPruefen('sichtbar'); });
+  window.addEventListener('online', () => googleNeuPruefen('online'));
+  window.addEventListener('pageshow', (ev) => { if (ev.persisted) googleNeuPruefen('sichtbar'); }); // iOS: aus dem Zwischenspeicher zurück
 
   return {
     get cfg() { return cfg; }, z, api, toast, banner, esc, pille, dialogOeffnen, bestaetigen, heuteLaden, zeichnen, oeffne,
-    einstellungenSpeichern, einstellungenDialog, schnellNotieren, datumKurz, heuteIso,
+    einstellungenSpeichern, einstellungenDialog, schnellNotieren, datumKurz, heuteIso, googleDiagnose,
+    get google() { return { zustand: google.zustand, zuletztOk: google.zuletztOk }; },
     ansichtRegistrieren(name, def) { fremdeAnsichten[name] = def; }
   };
 })();

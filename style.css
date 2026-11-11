@@ -677,3 +677,35 @@ details[open] > .karte-kopf .karte-kurz { display: none; }
   .md-inhalt { max-width: none; }
   .md-tabelle th, .md-tabelle td { padding: 6px 9px; max-width: 26ch; }
 }
+
+/* Google-Anzeige: neutraler Zustand „prüft …“ und Diagnose-Karte (Tipp auf „Google“) */
+button.pille { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.pille:focus-visible { outline: 2px solid var(--kante-hell); outline-offset: 2px; }
+.pille.prueft i { background: var(--text-2); animation: pulsieren 1s ease-in-out infinite; }
+.gd-kopf { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; margin: 0 0 12px; }
+.gd-kopf .karte-symbol { grid-row: auto; font-weight: 700; color: var(--text); }
+.gd-kopf .karte-titel b { font-size: 1.02rem; white-space: normal; }
+.gd-liste { list-style: none; margin: 0; padding: 0; border: 1px solid var(--kante); border-radius: 14px; background: rgba(255, 255, 255, .04); overflow: hidden; }
+.gd-schritt { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; padding: 11px 12px; }
+.gd-schritt + .gd-schritt { border-top: 1px solid var(--kante); }
+.gd-symbol { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: .85rem; font-weight: 700; border: 1px solid var(--kante); color: var(--text-3); }
+.gd-schritt.ok .gd-symbol { color: var(--ok); border-color: rgba(74, 222, 128, .45); background: rgba(74, 222, 128, .1); }
+.gd-schritt.fehler .gd-symbol { color: var(--fehler); border-color: rgba(251, 113, 133, .5); background: rgba(251, 113, 133, .12); }
+.gd-schritt.warn .gd-symbol { color: var(--warn); border-color: rgba(251, 191, 36, .5); background: rgba(251, 191, 36, .12); }
+.gd-schritt.laeuft .gd-symbol { border-color: var(--kante-hell); border-top-color: var(--text); animation: drehen .8s linear infinite; }
+.gd-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gd-text b { font-weight: 600; font-size: .9rem; }
+.gd-text span { color: var(--text-2); font-size: .86rem; line-height: 1.45; overflow-wrap: anywhere; }
+.gd-hinweis { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(251, 191, 36, .45); background: rgba(251, 191, 36, .08); }
+.gd-hinweis b { color: var(--warn); }
+.gd-hinweis span { font-size: .86rem; line-height: 1.45; color: var(--text-2); }
+.gd-hinweis .gd-frage { color: var(--text); }
+.gd-hinweis .knopf-reihe { margin-top: 4px; }
+.gd-info { margin: 10px 2px 0; font-size: .8rem; line-height: 1.45; color: var(--text-3); }
+.gd-info b { color: var(--text-2); font-weight: 600; }
+.gd .knopf-reihe .knopf[disabled] { opacity: .5; cursor: default; }
+@media (max-width: 860px) {
+  .gd-schritt { padding: 12px 10px; }
+  .gd-text span { font-size: .9rem; }
+  .gd .knopf-reihe .knopf { min-height: 42px; flex: 1 1 auto; }
+}

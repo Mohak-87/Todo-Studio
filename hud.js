@@ -114,12 +114,13 @@
   }
 
   function systemHtml(z) {
-    const g = !!heute(), verbunden = !!z;
+    const gz = Studio.google ? Studio.google.zustand : (heute() ? 'an' : 'aus');
+    const g = gz === 'an', verbunden = !!z;
     const st = z && z.stimme, ge = z && z.gedaechtnis;
     const mo = z && z.jarvis ? ({ denkt: 'denkt nach', bereit: 'bereit', fehler: 'Störung' }[z.jarvis.status] || z.jarvis.status) : 'getrennt';
     const h = `<ul class="hud-liste">
       ${zeile(`<i class="punkt ${verbunden ? 'ok' : 'fehler'}"></i>Zentrale`, verbunden ? 'verbunden' : 'getrennt')}
-      ${zeile(`<i class="punkt ${g ? 'ok' : 'fehler'}"></i>Google`, g ? 'verbunden' : 'getrennt')}
+      ${zeile(`<i class="punkt ${g ? 'ok' : gz === 'prueft' || !gz ? '' : 'fehler'}"></i>Google`, g ? 'verbunden' : gz === 'prueft' ? 'prüft …' : !gz ? '–' : 'getrennt')}
       ${zeile(`<i class="punkt mo"></i>MO`, esc(mo))}
       ${zeile(`<i class="punkt ${st && st.bereit ? 'ok' : ''}"></i>Stimme`, st && st.bereit ? esc(st.name.replace(/\s*\(.*\)/, '')) : 'Browser')}
       ${ge ? zeile('<i class="punkt mo"></i>Gedächtnis', `${ge.erinnerungen} Erinn. · ${ge.tage} Tage`) : ''}
