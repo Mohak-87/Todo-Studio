@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Todo Studio · MO</title>
   <meta name="theme-color" content="#06050d">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -59,13 +59,26 @@
       <h2>MO</h2>
       <div class="chat-kopf-rechts">
         <small id="chatStatus">bereit</small>
-        <button type="button" class="gespraech-knopf" id="knopfGespraech" aria-pressed="false" title="Freihändig sprechen: MO hört nach jeder Antwort wieder zu">🎧 Gespräch</button>
+        <button type="button" class="gespraech-knopf" id="knopfGespraech" aria-pressed="false" title="Gespräch: MO hört fortlaufend zu und antwortet laut">🎧 Gespräch</button>
         <button type="button" class="icon-knopf chat-zu" id="chatZu" aria-label="Chat einklappen" title="Einklappen">▾</button>
       </div>
     </div>
     <div class="live-arbeit" id="liveArbeit" hidden></div>
     <div class="verlauf" id="verlauf" aria-live="polite"></div>
-    <form class="eingabe" id="eingabe" autocomplete="off">
+    <div class="gespraech-leiste" id="gespraechLeiste" data-zustand="aus" hidden>
+      <button type="button" class="gespraech-zustand" id="gespraechZustand" title="Während MO spricht: antippen zum Unterbrechen" aria-live="polite">
+        <span class="gespraech-punkt" aria-hidden="true"><i></i><i></i><i></i></span><span id="gespraechText">Ich höre zu …</span></button>
+      <span class="gespraech-gehoert" id="gespraechGehoert"></span>
+      <div class="gespraech-knoepfe">
+        <label class="gespraech-reinreden" title="MO per Stimme unterbrechen, während er spricht (Kopfhörer empfohlen)"><input type="checkbox" id="gespraechReinreden"> Reinreden</label>
+        <button type="button" class="knopf klein gefahr gespraech-ende" id="gespraechEnde">■ Gespräch beenden</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Eingabe: eigene, immer offene Leiste über dem Dock – die Antworten erscheinen im Kasten rechts (#verlauf) -->
+  <div class="eingabe-dock glas" id="eingabeDock">
+    <form class="eingabe" id="eingabe" autocomplete="off" aria-label="Nachricht an MO">
       <div class="typ-wahl" id="typWahl" role="radiogroup" aria-label="Art der Notiz" hidden>
         <button type="button" data-typ="aufgabe" class="aktiv">Aufgabe</button>
         <button type="button" data-typ="termin">Termin</button>
@@ -79,7 +92,7 @@
       </div>
       <p class="eingabe-hinweis" id="eingabeHinweis" hidden></p>
     </form>
-  </section>
+  </div>
 
   <!-- Handy: der Chat ist eingeklappt, damit die Wolke Platz hat; dieser Knopf klappt ihn auf -->
   <button type="button" class="chat-knopf glas" id="chatKnopf" aria-controls="chat" aria-expanded="false" aria-label="Chat mit MO öffnen"><span>✦</span><em class="zaehler" id="chatZaehler" hidden></em></button>
@@ -114,6 +127,7 @@
   <script src="studio.js"></script>
   <script src="push.js"></script>
   <script src="weckwort.js"></script>
+  <script src="gespraech.js"></script>
   <script src="chatformat.js"></script>
   <script src="jarvis.js"></script>
   <script src="dateien.js"></script>

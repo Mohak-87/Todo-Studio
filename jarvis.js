@@ -107,7 +107,7 @@ const Jarvis = (() => {
         j.letzteNr = r.letzteNr;
         let auffrischen = false;
         for (const e of r.ereignisse) {
-          if (e.art === 'teil') { j.teil = e.text; chatZeichnen(); continue; } // MO schreibt gerade
+          if (e.art === 'teil') { j.teil = e.text; if (e.sprechen) gespraechTeil(e.sprechen); chatZeichnen(); continue; } // MO schreibt gerade
           if (e.art === 'fachagent') {
             if (j.zustand) { j.zustand.aktiveAgenten = Object.assign({}, j.zustand.aktiveAgenten, { [e.agent]: e.status }); }
             if (window.Wolke && Wolke.setzeAktive) Wolke.setzeAktive(j.zustand ? j.zustand.aktiveAgenten : {});
@@ -149,7 +149,11 @@ const Jarvis = (() => {
       if (innerWidth <= 860) chatUmschalten(false); // Handy: die Kugel braucht den Platz, die Antwort bleibt im Chat
     }
     // „sprechen“ ist reiner Text; fehlt er, wird eine kurze Antwort ohne Markdown-Zeichen vorgelesen
-    if (m.von === 'jarvis') { const klar = ChatFormat.zuSprechtext(m.text); sprechen(m.sprechen || (klar.length < 160 ? klar : '')); }
+    if (m.von === 'jarvis') {
+      const klar = ChatFormat.zuSprechtext(m.text);
+      if (h.modus === 'gespraech') gespraechAntwort(m.sprechen || (klar.length < 160 ? klar : 'Die Einzelheiten stehen im Chat.'));
+      else sprechen(m.sprechen || (klar.length < 160 ? klar : ''));
+    }
     if (m.von === 'jarvis' && !document.body.classList.contains('chat-offen')) { j.ungelesen = (j.ungelesen || 0) + 1; ungelesenZeigen(); }
     else if (m.von === 'nutzer' && !m.upload) eingabe.value = ''; // eine Bild-Vorschau löscht nicht, was gerade getippt wird
     chatZeichnen();
@@ -392,8 +396,8 @@ const Jarvis = (() => {
     else if (j.zustand && j.zustand.jarvis && j.zustand.jarvis.status === 'denkt') h += '<div class="denkt nachricht jarvis"><i></i><i></i><i></i></div>';
     verlaufEl.innerHTML = h || '<p class="leise" style="text-align:center;margin:auto">Sprechen oder schreiben Sie mir. Ich kümmere mich um den Rest.</p>';
     bilderNachbereiten();
-    if (unten || j.ersteRunde) verlaufEl.scrollTop = verlaufEl.scrollHeight;
-    j.ersteRunde = false;
+    if (unten || j.ersteRunde || j.zumEnde) verlaufEl.scrollTop = verlaufEl.scrollHeight;
+    j.ersteRunde = false; j.zumEnde = false;
   }
 
   // ---------- Live: was MO gerade baut (wie Claudes Aufgabenliste) ----------
@@ -850,7 +854,7 @@ const Jarvis = (() => {
     return null;
   }
 
-  async function senden(text) {
+  async function senden(text, { gespraech = false } = {}) {
     text = String(text || '').trim();
     if (!text) return;
     const ansicht = ansichtAufZuruf(text);
@@ -874,8 +878,10 @@ const Jarvis = (() => {
         return entscheiden(offen[0].id, JA.test(text) ? 'ja' : 'nein');
       }
       try {
-        await zentrale('POST', '/api/nachricht', { text });
+        // Im Gesprächsmodus mit Kennzeichen: MO antwortet dann kurz und dialogisch (Format bleibt gleich)
+        await zentrale('POST', '/api/nachricht', Gespraech.nachrichtKoerper(text, gespraech));
         statusSetzen('denkt …');
+        return 'zentrale'; // MO antwortet über die Zentrale
       } catch (err) {
         lokal('nutzer', text);
         lokal('jarvis', 'Die Nachricht hat die Zentrale nicht erreicht (' + err.message + ').', true);
@@ -911,7 +917,17 @@ const Jarvis = (() => {
     } catch (err) { lokal('jarvis', 'Das Notieren ist fehlgeschlagen: ' + err.message, true); }
   }
 
-  $('#eingabe').addEventListener('submit', (ev) => { ev.preventDefault(); stimmeFreischalten(); senden(eingabe.value); });
+  // Die Eingabeleiste sitzt über dem Dock; was dort gesendet wird, erscheint im Antwort-Kasten rechts – der öffnet sich dafür.
+  $('#eingabe').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    stimmeFreischalten();
+    if (!eingabe.value.trim()) return;
+    // Handy: eine offene Ansicht würde den Kasten verdecken – außer der Satz ruft selbst eine Ansicht auf
+    if (innerWidth <= 860 && !$('#schublade').hidden && !ansichtAufZuruf(eingabe.value)) Studio.oeffne('jarvis');
+    j.zumEnde = true;
+    chatUmschalten(true);
+    senden(eingabe.value);
+  });
   // Mehrzeilig (z. B. ein eingefügter Prompt): Enter sendet, Umschalt+Enter macht eine neue Zeile
   const hoeheAnpassen = () => { eingabe.style.height = '46px'; eingabe.style.height = Math.min(180, eingabe.scrollHeight + 2) + 'px'; };
   eingabe.addEventListener('input', hoeheAnpassen);
@@ -1041,6 +1057,7 @@ const Jarvis = (() => {
 
   function sprechen(text) {
     if (!text || !Studio.cfg.stimme) { gesprochen(); return; }
+    gespraechSpricht(text);
     if (zentraleStimmeNutzen()) {
       const satz = String(text).replace(/[„“”"*#_`]/g, '').slice(0, 2400);
       try { TTS && TTS.cancel(); } catch (e) { /* egal */ }
@@ -1154,17 +1171,11 @@ const Jarvis = (() => {
     $('#knopfGespraech').classList.toggle('aktiv', h.modus === 'gespraech');
     $('#knopfGespraech').setAttribute('aria-pressed', String(h.modus === 'gespraech'));
     if (window.Wolke) Wolke.setzeHoert(hoert && (h.modus !== 'wach' || h.befehl));
-    if (h.modus === 'gespraech') statusSetzen(hoert ? (h.ausRuf ? 'Gespräch – ich höre zu …' : 'hört zu …') : h.wartet ? 'denkt …' : 'Gespräch');
+    if (h.modus === 'gespraech') gespraechAnzeigen();
     else if (h.modus === 'wach') statusSetzen(h.befehl ? 'Ja, bitte?' : 'wartet auf „Hey MO“');
     else if (h.modus === 'einmal') statusSetzen('hört zu …');
   }
 
-  /** Gespräch nach dem Rufwort: wie der 🎧-Modus, endet bei Stille oder „Danke, das war's“ und wartet dann wieder auf „Hey MO“. */
-  function gespraechBeginnen() {
-    h.modus = 'gespraech'; h.ausRuf = true; h.stille = 0; h.befehl = false;
-    anzeigeHoeren();
-    statusSetzen('Gespräch – reden Sie einfach weiter');
-  }
 
   function modusSetzen(m) {
     h.ausRuf = false;
@@ -1193,12 +1204,14 @@ const Jarvis = (() => {
   /** Nach jeder Äußerung von MO: weiter zuhören, wenn ein freihändiger Modus aktiv ist. */
   function gesprochen() {
     window.dispatchEvent(new CustomEvent('mo:fertig'));
+    if (h.modus === 'gespraech') { gespraechGesprochen(); return; }
     h.wartet = false;
     clearTimeout(h.wartetTimer);
     if (h.modus === 'gespraech' || h.modus === 'wach') setTimeout(hoerenStarten, 350);
   }
 
   function hoerenStarten() {
+    if (h.modus === 'gespraech') { gsHoeren(); return; }
     if (!SR || h.sr || sprichtGerade || h.wartet || document.hidden || h.modus === 'aus') return;
     const wachen = h.modus === 'wach' && !h.befehl;
     const sr = new SR();
@@ -1251,8 +1264,8 @@ const Jarvis = (() => {
       anzeigeHoeren();
       if (wachen) {
         // „Hey MO“ startet ein Gespräch: danach hört MO nach jeder Antwort weiter zu – ohne erneutes Rufwort
-        if (h.ausloesen) { const b = h.ausloesen; h.ausloesen = null; eingabe.value = ''; gespraechBeginnen(); abschicken(b); }
-        else if (h.befehl) { h.befehl = false; gespraechBeginnen(); setTimeout(hoerenStarten, 150); }
+        if (h.ausloesen) { const b = h.ausloesen; h.ausloesen = null; eingabe.value = ''; gespraechStarten({ ausRuf: true, still: true }); gsSenden(b); }
+        else if (h.befehl) { h.befehl = false; gespraechStarten({ ausRuf: true, still: true }); }
         else setTimeout(hoerenStarten, 400); // Browser beenden Dauerlauschen gelegentlich – einfach weiter
         return;
       }
@@ -1294,22 +1307,241 @@ const Jarvis = (() => {
     stimmeFreischalten();
     if (!SR) { keineSprache('Dieser Browser bietet keine Spracheingabe.'); eingabe.focus(); return; }
     if (TTS) TTS.cancel();
-    if (h.modus === 'einmal' || h.modus === 'gespraech') { modusSetzen(grundModus()); return; }
+    if (h.modus === 'gespraech') { gespraechBeenden(); return; }
+    if (h.modus === 'einmal') { modusSetzen(grundModus()); return; }
     modusSetzen('einmal');
   });
 
   $('#knopfGespraech').addEventListener('click', () => {
     stimmeFreischalten();
-    if (!SR) { keineSprache('Freihändiges Sprechen ist in diesem Browser nicht möglich.'); return; }
-    if (h.modus === 'gespraech') { modusSetzen(grundModus()); return; }
-    if (TTS) TTS.cancel();
-    h.modus = 'gespraech';
-    anzeigeHoeren();
-    sprechen('Ich höre.'); // danach öffnet sich das Mikrofon von selbst
+    if (h.modus === 'gespraech') gespraechBeenden(); else gespraechStarten();
+  });
+
+  // ---------- Gesprächsmodus (wie ein Telefonat): Logik in gespraech.js, hier Mikrofon, Lautsprecher und Anzeige ----------
+  // Ablauf: zuhören → nach ~1,2 s Sprechpause automatisch senden → MO denkt → MO spricht → wieder zuhören.
+  // Unterbrechen: Die Spracherkennung läuft auch, während MO spricht. Was sie dabei hört, wird mit MOs aktuellem
+  // Sprechtext verglichen (Echo-Filter in gespraech.js): Nur eigene Worte (mind. zwei neue Wörter oder „Stopp“)
+  // stoppen MO sofort. Auf Android ist „Reinreden“ anfangs aus (siehe gsReinreden), dort tippt man auf die Anzeige.
+  const gs = Gespraech.erzeugen();
+  const IST_ANDROID = /Android/i.test(navigator.userAgent || '');
+  const leiste = $('#gespraechLeiste');
+  let gsSr = null, gsTakt = null, gsWarteTimer = null, gsVorab = null, gsRest = null, gsSchweigen = false, gsStarts = [], gsUnterbrochen = false;
+  // Beendet das Gespräch (ohne „Stopp“ – das unterbricht nur MOs Satz)
+  const GESPRAECH_ENDE = /^(ende|schluss|das wars?|das war'?s|danke,? das war'?s|gespräch beenden|beende das gespräch|tschüss|tschüs|auf wiedersehen|auflegen)[.!]?$/i;
+  function gsHinweis(text) { const el = $('#eingabeHinweis'); el.hidden = false; el.textContent = text; }
+
+  /** Darf MO beim Sprechen per Stimme unterbrochen werden? Am Laptop an, auf Android anfangs aus (Mikrofon und Ausgabe stören sich dort). */
+  function gsReinreden() { return Studio.cfg.gespraechReinreden === undefined ? !IST_ANDROID : !!Studio.cfg.gespraechReinreden; }
+
+  function gespraechAnzeigen() {
+    const an = h.modus === 'gespraech' && gs.aktiv;
+    leiste.hidden = !an;
+    document.body.classList.toggle('im-gespraech', an);
+    $('#knopfGespraech').textContent = an ? '■ Beenden' : '🎧 Gespräch';
+    $('#knopfGespraech').title = an ? 'Gespräch beenden' : 'Gespräch: MO hört fortlaufend zu und antwortet laut';
+    if (!an) return;
+    leiste.dataset.zustand = gs.zustand;
+    $('#gespraechText').textContent = Gespraech.ANZEIGE[gs.zustand] || '';
+    $('#gespraechGehoert').textContent = gs.text ? '„' + gs.text.slice(-90) + '“' : '';
+    $('#gespraechReinreden').checked = gsReinreden();
+    statusSetzen(gs.zustand === 'zuhoeren' ? 'hört zu …' : gs.zustand === 'denkt' ? 'denkt …' : gs.zustand === 'spricht' ? 'spricht …' : 'Gespräch');
+    if (window.Wolke) Wolke.setzeHoert(gs.zustand === 'zuhoeren' && !!gsSr);
+  }
+
+  function gespraechStarten({ ausRuf = false, still = false } = {}) {
+    const hinweis = Gespraech.voraussetzungen({ spracherkennung: !!SR, sichererKontext: window.isSecureContext !== false, sprachausgabe: !!TTS || zentraleStimmeNutzen() });
+    if (hinweis) { gsHinweis(hinweis); lokal('jarvis', hinweis); return false; }
+    hoerenPausieren(); // „Hey MO“-Lauscher oder 🎙 freigeben – es gibt nur ein Mikrofon
+    if (!Studio.cfg.stimme) { Studio.cfg.stimme = true; Studio.einstellungenSpeichern(); stimmeKnopf(); } // ein Gespräch braucht Ton
+    h.modus = 'gespraech'; h.ausRuf = ausRuf; h.befehl = false; h.ausloesen = null;
+    gsVorab = null; gsRest = null; gsSchweigen = false; gsStarts = [];
+    gs.beginnen(Date.now());
+    $('#eingabeHinweis').hidden = true;
+    clearInterval(gsTakt);
+    gsTakt = setInterval(gsPruefen, 150);
+    if (innerWidth <= 860) chatUmschalten(true);
+    gsUnterbrochen = false;
+    if (still || gsReinreden()) gsHoeren(); // im Klick starten: so fragt der Browser sofort nach dem Mikrofon
+    if (!still) sprechen('Ich höre.');      // ohne Reinreden öffnet sich das Mikrofon danach von selbst
+    gespraechAnzeigen();
+    return true;
+  }
+
+  /** Beendet das Gespräch. hinweis: kurze Meldung im Chat (laut, wenn laut = true). */
+  function gespraechBeenden(hinweis, laut) {
+    if (h.modus !== 'gespraech' && !gs.aktiv) return;
+    gs.beenden();
+    clearInterval(gsTakt); gsTakt = null; clearTimeout(gsWarteTimer);
+    gsVorab = null; gsRest = null; gsSchweigen = false;
+    ausgabeStoppen();
+    gsPausieren();
+    $('#gespraechGehoert').textContent = '';
+    modusSetzen(grundModus()); // zurück zu „Hey MO“ (falls eingeschaltet) oder aus
+    gespraechAnzeigen();
+    if (hinweis) lokal('jarvis', hinweis, laut);
+  }
+
+  /** MO sofort verstummen lassen (Browser-Stimme und Stimme der Zentrale). */
+  function ausgabeStoppen() {
+    const sprach = sprichtGerade;
+    sprichtGerade = false; clearTimeout(sprechTimer);
+    sprechLauf++; pegelLauf++;
+    try { moAudio.pause(); } catch (e) { /* egal */ }
+    try { if (TTS) TTS.cancel(); } catch (e) { /* egal */ }
+    if (sprach && window.Wolke) Wolke.setzeSpricht(false);
+  }
+
+  function gsPausieren() {
+    if (!gsSr) return;
+    const sr = gsSr; gsSr = null;
+    try { sr.onend = null; sr.abort(); } catch (e) { /* egal */ }
+  }
+
+  /** Startet die Spracherkennung fürs Gespräch, falls sie gerade laufen soll. */
+  function gsHoeren() {
+    if (!SR || gsSr || !gs.aktiv || document.hidden) return;
+    if (gs.zustand === 'spricht' && !gsReinreden()) return; // ohne Reinreden erst nach MOs Antwort
+    // Schutz vor Endlosschleife, falls der Browser die Erkennung sofort wieder beendet
+    const jetzt = Date.now();
+    gsStarts = gsStarts.filter((t) => jetzt - t < 10000).concat(jetzt);
+    if (gsStarts.length > 12) { setTimeout(gsHoeren, 2000); gsStarts = []; return; }
+    const sr = new SR();
+    sr.lang = 'de-DE';
+    sr.interimResults = true;
+    sr.maxAlternatives = 1;
+    // Android liefert im Dauerbetrieb doppelte Ergebnisse – dort Satz für Satz und sofort neu starten
+    sr.continuous = !IST_ANDROID;
+    sr.onresult = (e) => {
+      let zwischen = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) gsGehoert(t, true); else zwischen += t;
+      }
+      if (zwischen.trim()) gsGehoert(zwischen, false);
+    };
+    sr.onerror = (e) => {
+      const f = Gespraech.fehlerText(e.error);
+      if (f.endet) { gsHinweis(f.text); gespraechBeenden(f.text); }
+    };
+    sr.onaudiostart = () => gespraechAnzeigen();
+    sr.onend = () => {
+      if (gsSr !== sr) return;
+      gsSr = null;
+      gs.erkennungEndet();
+      gespraechAnzeigen();
+      setTimeout(gsHoeren, IST_ANDROID ? 60 : 150);
+    };
+    try { sr.start(); gsSr = sr; } catch (err) { gsSr = null; setTimeout(gsHoeren, 800); }
+    gespraechAnzeigen();
+  }
+
+  function gsGehoert(text, final) {
+    const art = gs.gehoert(text, final, Date.now());
+    if (art === 'unterbrechen') {
+      // Nutzer redet rein: MO verstummt sofort. Kam die Antwort erst teilweise (erster Satz), wird der Rest verworfen.
+      if (gsVorab) gsSchweigen = true;
+      gsVorab = null; gsRest = null; gsUnterbrochen = true;
+      ausgabeStoppen();
+      window.dispatchEvent(new CustomEvent('mo:fertig'));
+    }
+    if (art !== 'ignorieren') gespraechAnzeigen();
+  }
+
+  function gsPruefen() {
+    const r = gs.pruefen(Date.now());
+    if (!r) return;
+    if (r.art === 'senden') gsSenden(r.text);
+    else if (r.art === 'zeitablauf') gespraechBeenden('Drei Minuten lang war es still – ich habe das Gespräch beendet. Tippen Sie auf „Gespräch“, um weiterzureden.', true);
+  }
+
+  /** Eine fertige Äußerung an MO schicken (wie getippt, nur mit Gesprächskennzeichen). */
+  function gsSenden(text) {
+    text = String(text || '').trim();
+    $('#gespraechGehoert').textContent = '';
+    const nurStopp = gsUnterbrochen && Gespraech.normalisieren(text).split(' ').every((w) => Gespraech.STOPPWOERTER.includes(w));
+    gsUnterbrochen = false;
+    if (!text || nurStopp) { gs.denktFertig(Date.now()); gespraechAnzeigen(); return; } // „Stopp!“ hat MO nur unterbrochen
+    if (GESPRAECH_ENDE.test(text.replace(/[’`]/g, "'"))) {
+      lokal('nutzer', text);
+      gespraechBeenden();
+      sprechen(grundModus() === 'wach' ? 'Sehr wohl. Sagen Sie einfach „Hey MO“, wenn Sie mich brauchen.' : 'Sehr wohl. Ich bin da, wenn Sie mich brauchen.');
+      return;
+    }
+    const ruf = Weckwort.erkennen(text); // „Mo, …“ am Satzanfang ist erlaubt, wird aber nicht mitgeschickt
+    const inhalt = ruf ? ruf.rest : text;
+    if (!inhalt) { gs.denktFertig(Date.now()); gespraechAnzeigen(); return; }
+    gs.zustand = 'denkt';
+    gsVorab = null; gsRest = null;
+    clearTimeout(gsWarteTimer);
+    // Falls keine Antwort kommt (Zentrale weg, Freigabe per Wort …): nach einer Weile wieder zuhören
+    gsWarteTimer = setTimeout(() => { if (gs.zustand === 'denkt' && !sprichtGerade) { gsVorab = null; gs.denktFertig(Date.now()); gespraechAnzeigen(); } }, 90000);
+    gespraechAnzeigen();
+    senden(inhalt, { gespraech: true }).then((weg) => {
+      // Ohne Zentrale-Antwort (Freigabe per „Ja“, Briefkasten, Fehler): nicht auf MO warten
+      if (weg !== 'zentrale' && gs.zustand === 'denkt' && !sprichtGerade) { clearTimeout(gsWarteTimer); gs.denktFertig(Date.now()); gespraechAnzeigen(); gsHoeren(); }
+    }, () => {});
+  }
+
+  /** Live-Teilantwort mit Sprechtext: Ist der erste Satz fertig, spricht MO ihn sofort (kürzere Wartezeit). */
+  function gespraechTeil(sprechtext) {
+    if (h.modus !== 'gespraech' || gs.zustand !== 'denkt' || gsVorab || gsSchweigen || !Studio.cfg.stimme) return;
+    const satz = Gespraech.ersterSatz(sprechtext);
+    if (!satz) return;
+    gsVorab = { text: satz };
+    sprechen(satz);
+  }
+
+  /** Fertige Antwort von MO im Gespräch: nur das sagen, was nach dem vorab gesprochenen Satz noch fehlt. */
+  function gespraechAntwort(sag) {
+    clearTimeout(gsWarteTimer);
+    if (gsSchweigen) { gsSchweigen = false; return; } // diese Antwort wurde unterbrochen – nicht nachträglich vorlesen
+    if (gs.zustand === 'zuhoeren' && gs.text) return;  // MO fällt nicht ins Wort: Meldungen von selbst stehen dann nur im Chat
+    if (gsVorab) {
+      const rest = Gespraech.restNach(sag, gsVorab.text);
+      gsVorab = null;
+      if (sprichtGerade) { gsRest = rest; return; } // nach dem ersten Satz weiter
+      if (rest) sprechen(rest); else gespraechGesprochen();
+      return;
+    }
+    sprechen(sag);
+  }
+
+  /** Aus sprechen(): MO beginnt zu sprechen. Ohne Reinreden ist das Mikrofon währenddessen zu. */
+  function gespraechSpricht(text) {
+    if (h.modus !== 'gespraech' || !gs.aktiv) return;
+    gs.spricht(text, Date.now());
+    if (!gsReinreden()) gsPausieren();
+    gespraechAnzeigen();
+  }
+
+  /** Aus gesprochen(): MO ist fertig – Rest der Antwort sagen oder wieder zuhören. */
+  function gespraechGesprochen() {
+    h.wartet = false;
+    if (!gs.aktiv) return;
+    if (gsRest) { const r = gsRest; gsRest = null; sprechen(r); return; }
+    gs.gesprochenFertig(Date.now());
+    if (gsVorab) gs.zustand = 'denkt'; // erster Satz gesagt, der Rest wird noch geschrieben
+    gespraechAnzeigen();
+    setTimeout(gsHoeren, 120);
+  }
+
+  // Anzeige antippen = MO unterbrechen (geht immer, auch ohne Reinreden)
+  $('#gespraechZustand').addEventListener('click', () => {
+    if (gs.zustand !== 'spricht') return;
+    if (gsVorab) gsSchweigen = true;
+    gsVorab = null; gsRest = null;
+    ausgabeStoppen();
+    gespraechGesprochen();
+  });
+  $('#gespraechEnde').addEventListener('click', () => gespraechBeenden());
+  $('#gespraechReinreden').addEventListener('change', (ev) => {
+    Studio.cfg.gespraechReinreden = ev.target.checked; Studio.einstellungenSpeichern();
+    if (gs.zustand === 'spricht') { if (ev.target.checked) gsHoeren(); else gsPausieren(); }
+    gespraechAnzeigen();
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) hoerenPausieren(); else hoerenStarten();
+    if (document.hidden) { hoerenPausieren(); gsPausieren(); } else hoerenStarten();
   });
   // Rufwort: startet nach der ersten Berührung (Browser verlangen eine Nutzeraktion fürs Mikrofon)
   document.addEventListener('pointerdown', () => { if (h.modus === 'aus' && grundModus() === 'wach') modusSetzen('wach'); }, { once: true });
@@ -1348,7 +1580,9 @@ const Jarvis = (() => {
   // ---------- Chat ein-/ausklappen (grundsätzlich eingeklappt – der Bildschirm gehört der Wolke) ----------
   function chatUmschalten(offen) {
     if (offen === undefined) offen = !document.body.classList.contains('chat-offen');
+    if (offen === document.body.classList.contains('chat-offen')) { if (offen) { j.ungelesen = 0; ungelesenZeigen(); } return; }
     document.body.classList.toggle('chat-offen', offen);
+    if (innerWidth > 860) try { localStorage.setItem('studio.chatZu', offen ? '0' : '1'); } catch { /* egal */ }
     $('#chatKnopf').setAttribute('aria-expanded', String(offen));
     if (offen) { j.ungelesen = 0; ungelesenZeigen(); verlaufEl.scrollTop = verlaufEl.scrollHeight; }
     window.dispatchEvent(new Event('studio-layout'));
@@ -1360,6 +1594,37 @@ const Jarvis = (() => {
   $('#dock [data-ansicht="jarvis"]').addEventListener('click', () => {
     chatUmschalten($('#schublade').hidden ? undefined : true);
   }, true);
+
+  // ---------- Eingabeleiste: Höhe und Handy-Tastatur messen ----------
+  // --eingabe-oben (Abstand ihrer Oberkante zum unteren Rand) bestimmt, wo Chat, Schublade und Seitenanzeigen enden.
+  // Auf dem Handy rückt die Leiste über die Tastatur (iOS: visualViewport; Android: interactive-widget=resizes-content).
+  const eingabeDock = $('#eingabeDock');
+  const wurzel = document.documentElement;
+  let hoechsteHoehe = innerHeight, letzteBreite = innerWidth;
+  function eingabeMessen() {
+    if (innerWidth !== letzteBreite) { letzteBreite = innerWidth; hoechsteHoehe = innerHeight; } // Drehen: neu ansetzen
+    hoechsteHoehe = Math.max(hoechsteHoehe, innerHeight);
+    const vv = window.visualViewport;
+    const tastatur = vv ? Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)) : 0;
+    const getippt = document.activeElement === eingabe;
+    const offen = innerWidth <= 860 && (tastatur > 120 || (getippt && innerHeight < hoechsteHoehe - 150));
+    wurzel.style.setProperty('--tastatur', tastatur + 'px');
+    wurzel.style.setProperty('--vh', innerHeight + 'px');
+    document.body.classList.toggle('tastatur-offen', offen);
+    const r = eingabeDock.getBoundingClientRect();
+    if (r.height) wurzel.style.setProperty('--eingabe-oben', Math.round(innerHeight - r.top) + 'px');
+  }
+  let messenPlan = 0;
+  const messenBald = () => { cancelAnimationFrame(messenPlan); messenPlan = requestAnimationFrame(eingabeMessen); };
+  if (window.ResizeObserver) new ResizeObserver(messenBald).observe(eingabeDock);
+  window.addEventListener('resize', messenBald);
+  if (window.visualViewport) { visualViewport.addEventListener('resize', messenBald); visualViewport.addEventListener('scroll', messenBald); }
+  eingabe.addEventListener('focus', () => setTimeout(messenBald, 250));
+  eingabe.addEventListener('blur', () => setTimeout(messenBald, 250));
+  eingabeMessen();
+
+  // Laptop: Der Antwort-Kasten rechts steht von Anfang an offen (außer er wurde zuletzt eingeklappt)
+  try { if (innerWidth > 860 && localStorage.getItem('studio.chatZu') !== '1') chatUmschalten(true); } catch { /* egal */ }
 
   verbinden();
   chatZeichnen();
